@@ -1,7 +1,44 @@
-venv/
-.env
+# Python
 __pycache__/
-*.pyc
-data/vector_db/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Node.js
 node_modules/
+
+# Environment
+.env
+.env.local
+
+# Data & Vector stores
+data/
 chroma/
+chroma_db/
+*.faiss
+*.pkl
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build outputs
+frontend/frontend/dist/
+
+# Logs
+*.log
+
+# Gemini/Agent (optional)
+.gemini/
