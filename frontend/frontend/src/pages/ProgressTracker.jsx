@@ -28,10 +28,16 @@ async function getAnalytics() {
   return res.json();
 }
 
+async function getPerformance() {
+  const res = await fetch(`${API_BASE}/performance/${getUserId()}`);
+  return res.json();
+}
+
 export default function ProgressTracker() {
   const [progress, setProgress] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
   const [analytics, setAnalytics] = useState(null);
+  const [performance, setPerformance] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
 
@@ -42,15 +48,17 @@ export default function ProgressTracker() {
   async function loadData() {
     setLoading(true);
     try {
-      const [progressData, recsData, analyticsData] = await Promise.all([
+      const [progressData, recsData, analyticsData, performanceData] = await Promise.all([
         getProgress(),
         getRecommendations(),
-        getAnalytics()
+        getAnalytics(),
+        getPerformance()
       ]);
 
       setProgress(progressData);
       setRecommendations(recsData.recommendations || []);
       setAnalytics(analyticsData);
+      setPerformance(performanceData);
     } catch (error) {
       console.error("Error loading progress:", error);
     } finally {
@@ -165,7 +173,7 @@ export default function ProgressTracker() {
         {/* Tabs */}
         <div style={styles.tabsContainer}>
           <div style={styles.tabs}>
-            {["overview", "topics", "achievements", "analytics"].map((tab) => (
+            {["overview", "performance", "topics", "achievements", "analytics"].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -175,6 +183,7 @@ export default function ProgressTracker() {
                 }}
               >
                 {tab === "overview" && "📈 "}
+                {tab === "performance" && "🎯 "}
                 {tab === "topics" && "📚 "}
                 {tab === "achievements" && "🏆 "}
                 {tab === "analytics" && "📊 "}
@@ -192,6 +201,10 @@ export default function ProgressTracker() {
               recommendations={recommendations}
               analytics={analytics}
             />
+          )}
+
+          {activeTab === "performance" && (
+            <PerformanceTab performance={performance} />
           )}
 
           {activeTab === "topics" && (
@@ -543,6 +556,192 @@ function AnalyticsTab({ analytics, progress }) {
           ))}
         </div>
         <p style={styles.streakTip}>Keep learning daily to maintain your streak!</p>
+      </div>
+    </div>
+  );
+}
+
+// Performance Analysis Tab (ML-based)
+function PerformanceTab({ performance }) {
+  if (!performance || performance.status === "insufficient_data") {
+    return (
+      <div style={styles.emptyTab}>
+        <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>📊</div>
+        <h3>Not enough data yet</h3>
+        <p>{performance?.message || "Study more topics to get AI-powered performance predictions!"}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={styles.performanceGrid}>
+      {/* Predictions Card */}
+      <div style={styles.predictionCard}>
+        <h3 style={styles.cardTitle}>🎯 Performance Predictions</h3>
+
+        <div style={styles.predictionMain}>
+          <div style={styles.readinessCircle}>
+            <svg width="120" height="120" viewBox="0 0 120 120">
+              <circle cx="60" cy="60" r="54" fill="none" stroke="#e5e7eb" strokeWidth="8" />
+              <circle
+                cx="60" cy="60" r="54" fill="none"
+                stroke={performance.predictions?.overall_readiness >= 70 ? "#10b981" :
+                  performance.predictions?.overall_readiness >= 50 ? "#f59e0b" : "#ef4444"}
+                strokeWidth="8"
+                strokeDasharray={`${(performance.predictions?.overall_readiness / 100) * 339} 339`}
+                strokeLinecap="round"
+                transform="rotate(-90 60 60)"
+              />
+            </svg>
+            <div style={styles.readinessText}>
+              <span style={styles.readinessValue}>{performance.predictions?.overall_readiness || 0}%</span>
+              <span style={styles.readinessLabel}>Readiness</span>
+            </div>
+          </div>
+
+          <div style={styles.predictionDetails}>
+            <div style={styles.predictionItem}>
+              <span style={styles.predictionLabel}>Status</span>
+              <span style={styles.predictionValue}>{performance.predictions?.readiness_level}</span>
+            </div>
+            <div style={styles.predictionItem}>
+              <span style={styles.predictionLabel}>Predicted Grade</span>
+              <span style={{ ...styles.predictionValue, color: "#667eea" }}>
+                {performance.predictions?.exam_prediction?.grade_prediction}
+              </span>
+            </div>
+            <div style={styles.predictionItem}>
+              <span style={styles.predictionLabel}>Learning Style</span>
+              <span style={styles.predictionValue}>{performance.predictions?.learning_style}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Strong Topics */}
+      <div style={styles.strengthCard}>
+        <h3 style={styles.cardTitle}>💪 Strong Topics</h3>
+        {performance.strong_topics?.length > 0 ? (
+          <div style={styles.topicList}>
+            {performance.strong_topics.map((topic, i) => (
+              <div key={i} style={styles.topicItem}>
+                <div style={styles.topicInfo}>
+                  <span style={styles.topicRank}>#{i + 1}</span>
+                  <span style={styles.topicName}>{topic.name}</span>
+                </div>
+                <div style={styles.topicScore}>
+                  <div style={{ ...styles.scoreBar, background: "#d1fae5" }}>
+                    <div style={{ ...styles.scoreBarFill, width: `${topic.score}%`, background: "#10b981" }} />
+                  </div>
+                  <span style={{ color: "#10b981", fontWeight: "600" }}>{topic.score}%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p style={styles.emptyMessage}>Keep studying to build strong areas!</p>
+        )}
+      </div>
+
+      {/* Weak Topics (Needs Attention) */}
+      <div style={styles.weakCard}>
+        <h3 style={styles.cardTitle}>⚠️ Needs Attention</h3>
+        {performance.weak_topics?.length > 0 ? (
+          <div style={styles.topicList}>
+            {performance.weak_topics.map((topic, i) => (
+              <div key={i} style={styles.weakTopicItem}>
+                <div style={styles.topicInfo}>
+                  <span style={{ ...styles.topicRank, background: "#fee2e2", color: "#dc2626" }}>!</span>
+                  <span style={styles.topicName}>{topic.name}</span>
+                </div>
+                <div style={styles.topicScore}>
+                  <div style={{ ...styles.scoreBar, background: "#fee2e2" }}>
+                    <div style={{ ...styles.scoreBarFill, width: `${topic.score}%`, background: "#ef4444" }} />
+                  </div>
+                  <span style={{ color: "#ef4444", fontWeight: "600" }}>{topic.score}%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p style={styles.emptyMessage}>Great! No weak areas detected! 🎉</p>
+        )}
+      </div>
+
+      {/* Focus Areas (Prioritized) */}
+      <div style={styles.focusCard}>
+        <h3 style={styles.cardTitle}>🎯 Focus Areas</h3>
+        {performance.focus_areas?.length > 0 ? (
+          <div style={styles.focusList}>
+            {performance.focus_areas.map((area, i) => (
+              <div
+                key={i}
+                style={{
+                  ...styles.focusItem,
+                  borderLeft: `4px solid ${area.priority === "high" ? "#ef4444" : "#f59e0b"}`
+                }}
+              >
+                <div style={styles.focusHeader}>
+                  <span style={styles.focusTopic}>{area.topic}</span>
+                  <span style={{
+                    ...styles.priorityBadge,
+                    background: area.priority === "high" ? "#fee2e2" : "#fef3c7",
+                    color: area.priority === "high" ? "#dc2626" : "#d97706"
+                  }}>
+                    {area.priority.toUpperCase()}
+                  </span>
+                </div>
+                <p style={styles.focusReason}>{area.reason}</p>
+                <p style={styles.focusAction}>👉 {area.suggested_action}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p style={styles.emptyMessage}>No specific focus areas - you're doing great!</p>
+        )}
+      </div>
+
+      {/* Recommendations */}
+      <div style={styles.recsCard}>
+        <h3 style={styles.cardTitle}>💡 AI Recommendations</h3>
+        {performance.recommendations?.length > 0 ? (
+          <div style={styles.recsList}>
+            {performance.recommendations.map((rec, i) => (
+              <div key={i} style={styles.recItem}>
+                <span style={styles.recNumber}>{i + 1}</span>
+                <span style={styles.recText}>{rec}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p style={styles.emptyMessage}>Keep learning to get personalized recommendations!</p>
+        )}
+      </div>
+
+      {/* Improvement Potential */}
+      <div style={styles.improvementCard}>
+        <h3 style={styles.cardTitle}>📈 Improvement Potential</h3>
+        <div style={styles.improvementStats}>
+          <div style={styles.improvementStat}>
+            <span style={styles.improvementValue}>
+              {performance.predictions?.improvement_potential?.current_average || 0}%
+            </span>
+            <span style={styles.improvementLabel}>Current Avg</span>
+          </div>
+          <div style={styles.improvementArrow}>→</div>
+          <div style={styles.improvementStat}>
+            <span style={{ ...styles.improvementValue, color: "#10b981" }}>
+              {performance.predictions?.improvement_potential?.potential_average || 0}%
+            </span>
+            <span style={styles.improvementLabel}>Potential</span>
+          </div>
+        </div>
+        <div style={styles.quickWins}>
+          <span style={styles.quickWinsIcon}>⚡</span>
+          <span>
+            {performance.predictions?.improvement_potential?.quick_wins || 0} quick wins available!
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -1216,6 +1415,262 @@ const styles = {
   emptyMessage: {
     color: "#9ca3af",
     fontSize: "0.9rem",
+  },
+  // Performance Tab Styles
+  performanceGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+    gap: "20px",
+  },
+  predictionCard: {
+    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+    borderRadius: "20px",
+    padding: "24px",
+    color: "white",
+    gridColumn: "span 2",
+  },
+  predictionMain: {
+    display: "flex",
+    alignItems: "center",
+    gap: "30px",
+    marginTop: "16px",
+    flexWrap: "wrap",
+  },
+  readinessCircle: {
+    position: "relative",
+    width: "120px",
+    height: "120px",
+  },
+  readinessText: {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    transform: "translate(-50%, -50%)",
+    textAlign: "center",
+  },
+  readinessValue: {
+    display: "block",
+    fontSize: "1.5rem",
+    fontWeight: "700",
+  },
+  readinessLabel: {
+    fontSize: "0.8rem",
+    opacity: 0.9,
+  },
+  predictionDetails: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+  },
+  predictionItem: {
+    display: "flex",
+    justifyContent: "space-between",
+    padding: "10px 14px",
+    background: "rgba(255,255,255,0.15)",
+    borderRadius: "10px",
+  },
+  predictionLabel: {
+    opacity: 0.9,
+    fontSize: "0.9rem",
+  },
+  predictionValue: {
+    fontWeight: "600",
+    fontSize: "0.9rem",
+  },
+  strengthCard: {
+    background: "#ecfdf5",
+    border: "1px solid #a7f3d0",
+    borderRadius: "16px",
+    padding: "24px",
+  },
+  weakCard: {
+    background: "#fef2f2",
+    border: "1px solid #fecaca",
+    borderRadius: "16px",
+    padding: "24px",
+  },
+  focusCard: {
+    background: "white",
+    borderRadius: "16px",
+    padding: "24px",
+    boxShadow: "0 4px 20px rgba(0,0,0,0.06)",
+    gridColumn: "span 2",
+  },
+  recsCard: {
+    background: "#fffbeb",
+    border: "1px solid #fde68a",
+    borderRadius: "16px",
+    padding: "24px",
+  },
+  improvementCard: {
+    background: "white",
+    borderRadius: "16px",
+    padding: "24px",
+    boxShadow: "0 4px 20px rgba(0,0,0,0.06)",
+  },
+  topicList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+  },
+  topicItem: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "12px",
+    background: "white",
+    borderRadius: "10px",
+  },
+  weakTopicItem: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "12px",
+    background: "white",
+    borderRadius: "10px",
+  },
+  topicInfo: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+  },
+  topicRank: {
+    width: "28px",
+    height: "28px",
+    borderRadius: "8px",
+    background: "#d1fae5",
+    color: "#065f46",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: "700",
+    fontSize: "0.8rem",
+  },
+  topicName: {
+    fontWeight: "500",
+  },
+  topicScore: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+  },
+  scoreBar: {
+    width: "80px",
+    height: "8px",
+    borderRadius: "4px",
+    overflow: "hidden",
+  },
+  scoreBarFill: {
+    height: "100%",
+    borderRadius: "4px",
+    transition: "width 0.3s",
+  },
+  focusList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "14px",
+  },
+  focusItem: {
+    padding: "16px",
+    background: "#f9fafb",
+    borderRadius: "10px",
+  },
+  focusHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: "8px",
+  },
+  focusTopic: {
+    fontWeight: "600",
+    fontSize: "1rem",
+  },
+  priorityBadge: {
+    padding: "4px 10px",
+    borderRadius: "20px",
+    fontSize: "0.7rem",
+    fontWeight: "700",
+  },
+  focusReason: {
+    fontSize: "0.9rem",
+    color: "#6b7280",
+    margin: "4px 0",
+  },
+  focusAction: {
+    fontSize: "0.9rem",
+    color: "#374151",
+    fontWeight: "500",
+    marginTop: "8px",
+  },
+  recsList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+  },
+  recItem: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: "10px",
+    padding: "12px",
+    background: "white",
+    borderRadius: "10px",
+  },
+  recNumber: {
+    width: "24px",
+    height: "24px",
+    borderRadius: "6px",
+    background: "#fbbf24",
+    color: "white",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: "700",
+    fontSize: "0.8rem",
+    flexShrink: 0,
+  },
+  recText: {
+    fontSize: "0.9rem",
+    lineHeight: 1.4,
+  },
+  improvementStats: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "20px",
+    marginTop: "16px",
+  },
+  improvementStat: {
+    textAlign: "center",
+  },
+  improvementValue: {
+    display: "block",
+    fontSize: "2rem",
+    fontWeight: "700",
+    color: "#667eea",
+  },
+  improvementLabel: {
+    fontSize: "0.85rem",
+    color: "#6b7280",
+  },
+  improvementArrow: {
+    fontSize: "2rem",
+    color: "#10b981",
+  },
+  quickWins: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "8px",
+    marginTop: "20px",
+    padding: "12px",
+    background: "#ecfdf5",
+    borderRadius: "10px",
+    color: "#065f46",
+    fontWeight: "500",
+  },
+  quickWinsIcon: {
+    fontSize: "1.2rem",
   },
 };
 

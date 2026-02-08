@@ -32,6 +32,7 @@ from backend.agents.progress_agent import (
     get_recommendations,
     get_analytics
 )
+from backend.agents.performance_analyzer import get_performance_analysis
 from typing import Optional
 
 app = FastAPI(title="Multimodal AI Teaching Assistant")
@@ -423,6 +424,63 @@ async def code_help(
         return {
             "stage": "ERROR",
             "content": f"⚠️ Error: {str(e)}"
+        }
+
+
+# ============================================================
+# PROGRESS & PERFORMANCE TRACKING
+# ============================================================
+
+@app.get("/progress/{user_id}")
+async def get_progress(user_id: str):
+    """Get user's learning progress"""
+    try:
+        progress = get_user_progress(user_id)
+        return progress
+    except Exception as e:
+        print(f"❌ Progress error: {e}")
+        return {"error": str(e)}
+
+@app.get("/recommendations/{user_id}")
+async def recommendations(user_id: str):
+    """Get personalized learning recommendations"""
+    try:
+        recs = get_recommendations(user_id)
+        return recs
+    except Exception as e:
+        print(f"❌ Recommendations error: {e}")
+        return {"recommendations": []}
+
+@app.get("/analytics/{user_id}")
+async def analytics(user_id: str):
+    """Get learning analytics"""
+    try:
+        data = get_analytics(user_id)
+        return data
+    except Exception as e:
+        print(f"❌ Analytics error: {e}")
+        return {"error": str(e)}
+
+@app.get("/performance/{user_id}")
+async def performance_analysis(user_id: str):
+    """
+    Get ML-based performance analysis including:
+    - Strong/weak topic identification
+    - Exam performance prediction
+    - Personalized focus areas
+    - Learning style analysis
+    """
+    try:
+        print(f"📊 Performance analysis for: {user_id}")
+        analysis = get_performance_analysis(user_id)
+        return analysis
+    except Exception as e:
+        print(f"❌ Performance analysis error: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return {
+            "status": "error",
+            "message": f"Error analyzing performance: {str(e)}"
         }
 
 
