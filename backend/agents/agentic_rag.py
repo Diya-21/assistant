@@ -18,7 +18,11 @@ class AgenticRAG:
     """
     
     def __init__(self):
-        self.retriever = get_retriever()
+        try:
+            self.retriever = get_retriever()
+        except Exception as e:
+            print(f"⚠️ Retriever not available: {e}")
+            self.retriever = None
         self.max_iterations = 3
         self.conversation_history = []
     
@@ -68,8 +72,13 @@ Output: ["MapReduce architecture and features", "Apache Spark architecture and f
     
     def _retrieve_with_multiple_queries(self, queries: List[str], k: int = 3) -> str:
         """
-        Retrieve documents using multiple queries and combine them
+        Retrieve documents using multiple queries and combine them.
+        Falls back to general knowledge if no retriever available.
         """
+        if not self.retriever:
+            # No syllabus uploaded - use general knowledge context
+            return f"No syllabus uploaded. Use your general knowledge about AI, Data Science, Machine Learning, and Big Data to answer about: {', '.join(queries)}"
+        
         all_docs = []
         seen_content = set()
         
@@ -89,7 +98,7 @@ Output: ["MapReduce architecture and features", "Apache Spark architecture and f
                 continue
         
         if not all_docs:
-            return ""
+            return f"No relevant content found in syllabus. Use general knowledge about: {', '.join(queries)}"
         
         # Combine all unique documents
         combined_context = "\n\n---\n\n".join(

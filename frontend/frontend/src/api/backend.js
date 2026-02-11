@@ -66,6 +66,21 @@ export async function learnTopic(topic, stage = "explain") {
 
   return res.json();
 }
+
+/* ---------- Deep Research (Agentic RAG) ---------- */
+export async function deepResearch(question) {
+  const form = new FormData();
+  form.append("question", question);
+  form.append("user_id", getUserIdLocal());
+
+  const res = await fetch(`${API_BASE}/deep-research/`, {
+    method: "POST",
+    body: form,
+  });
+
+  return res.json();
+}
+
 const BASE = "http://127.0.0.1:8000";
 
 // Generate a simple user ID (in production, use proper auth)

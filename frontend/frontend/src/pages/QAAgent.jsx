@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { learnTopic } from "../api/backend";
+import { learnTopic, deepResearch } from "../api/backend";
 import ReactMarkdown from "react-markdown";
 
 export default function LearningAgent() {
@@ -15,6 +15,8 @@ export default function LearningAgent() {
   const [score, setScore] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [deepResearchResult, setDeepResearchResult] = useState(null);
+  const [deepLoading, setDeepLoading] = useState(false);
 
   const fileInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -104,6 +106,33 @@ export default function LearningAgent() {
     setScore(null);
     setError("");
     setUploadedFile(null);
+    setDeepResearchResult(null);
+  }
+
+  async function handleDeepResearch() {
+    if (!topic.trim()) {
+      setError("Please enter a topic first");
+      return;
+    }
+
+    setDeepLoading(true);
+    setError("");
+    setDeepResearchResult(null);
+
+    try {
+      const data = await deepResearch(topic);
+
+      if (data.stage === "ERROR") {
+        setError(data.content);
+      } else {
+        setDeepResearchResult(data);
+      }
+    } catch (err) {
+      console.error("Deep research error:", err);
+      setError("Failed to run deep research. Make sure backend is running.");
+    } finally {
+      setDeepLoading(false);
+    }
   }
 
   return (
@@ -261,28 +290,52 @@ export default function LearningAgent() {
               </div>
             )}
 
-            {/* Start Button */}
-            <button
-              onClick={() => handleAsk("explain")}
-              disabled={loading || !topic.trim()}
-              style={{
-                ...styles.startBtn,
-                opacity: loading || !topic.trim() ? 0.6 : 1,
-                cursor: loading || !topic.trim() ? "not-allowed" : "pointer",
-              }}
-            >
-              {loading ? (
-                <>
-                  <span style={styles.spinner}></span>
-                  Thinking...
-                </>
-              ) : (
-                <>
-                  <span>🚀</span>
-                  Start Learning
-                </>
-              )}
-            </button>
+            {/* Buttons */}
+            <div style={styles.buttonRow}>
+              <button
+                onClick={() => handleAsk("explain")}
+                disabled={loading || deepLoading || !topic.trim()}
+                style={{
+                  ...styles.startBtn,
+                  opacity: loading || deepLoading || !topic.trim() ? 0.6 : 1,
+                  cursor: loading || deepLoading || !topic.trim() ? "not-allowed" : "pointer",
+                }}
+              >
+                {loading ? (
+                  <>
+                    <span style={styles.spinner}></span>
+                    Thinking...
+                  </>
+                ) : (
+                  <>
+                    <span>🚀</span>
+                    Start Learning
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={handleDeepResearch}
+                disabled={loading || deepLoading || !topic.trim()}
+                style={{
+                  ...styles.deepResearchBtn,
+                  opacity: loading || deepLoading || !topic.trim() ? 0.6 : 1,
+                  cursor: loading || deepLoading || !topic.trim() ? "not-allowed" : "pointer",
+                }}
+              >
+                {deepLoading ? (
+                  <>
+                    <span style={styles.spinner}></span>
+                    Deep Researching...
+                  </>
+                ) : (
+                  <>
+                    <span>🧠</span>
+                    Deep Research (Agentic RAG)
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         )}
 
@@ -292,6 +345,110 @@ export default function LearningAgent() {
             <div style={styles.loadingSpinner}></div>
             <h3 style={styles.loadingTitle}>AI is preparing your lesson...</h3>
             <p style={styles.loadingText}>This may take 10-30 seconds</p>
+          </div>
+        )}
+
+        {/* Deep Research Loading */}
+        {deepLoading && (
+          <div style={styles.loadingBox}>
+            <div style={styles.loadingSpinner}></div>
+            <h3 style={styles.loadingTitle}>🧠 Agentic RAG Processing...</h3>
+            <p style={styles.loadingText}>Breaking question into sub-queries, searching multiple times, and self-evaluating...</p>
+            <div style={styles.agenticSteps}>
+              <div style={styles.agenticStep}>⚙️ Planning sub-queries...</div>
+              <div style={styles.agenticStep}>🔍 Multi-query retrieval...</div>
+              <div style={styles.agenticStep}>💭 Generating answer...</div>
+              <div style={styles.agenticStep}>🔎 Self-evaluating...</div>
+            </div>
+          </div>
+        )}
+
+        {/* Deep Research Results */}
+        {deepResearchResult && (
+          <div style={styles.responseSection}>
+            <div style={styles.topicHeader}>
+              <div>
+                <span style={styles.deepResearchLabel}>🧠 Agentic RAG</span>
+                <h2 style={styles.topicTitle}>{topic}</h2>
+              </div>
+              <button onClick={resetAgent} style={styles.newTopicBtn}>
+                🔄 New Topic
+              </button>
+            </div>
+
+            {/* Agentic RAG Metadata */}
+            <div style={styles.agenticMeta}>
+              <div style={styles.metaItem}>
+                <span style={styles.metaIcon}>🔄</span>
+                <span>{deepResearchResult.iterations || 1} Iterations</span>
+              </div>
+              <div style={styles.metaItem}>
+                <span style={styles.metaIcon}>📚</span>
+                <span>{deepResearchResult.sources_used || 0} Sources Used</span>
+              </div>
+              <div style={styles.metaItem}>
+                <span style={styles.metaIcon}>🔍</span>
+                <span>{deepResearchResult.sub_queries?.length || 0} Sub-queries</span>
+              </div>
+            </div>
+
+            {/* Sub-queries Used */}
+            {deepResearchResult.sub_queries?.length > 0 && (
+              <div style={styles.subQueriesBox}>
+                <h4 style={styles.subQueriesTitle}>🔍 Sub-queries Generated</h4>
+                <div style={styles.subQueriesList}>
+                  {deepResearchResult.sub_queries.map((q, i) => (
+                    <div key={i} style={styles.subQueryItem}>
+                      <span style={styles.subQueryNum}>{i + 1}</span>
+                      <span>{q}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Reasoning Trace */}
+            {deepResearchResult.reasoning_trace?.length > 0 && (
+              <div style={styles.traceBox}>
+                <h4 style={styles.traceTitle}>📋 Reasoning Trace</h4>
+                <div style={styles.traceList}>
+                  {deepResearchResult.reasoning_trace.map((step, i) => (
+                    <div key={i} style={styles.traceStep}>
+                      <div style={styles.traceDot}></div>
+                      <span>{step}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Main Answer */}
+            <div style={styles.contentCard}>
+              <h3 style={styles.cardHeader}>
+                <span>📝</span> Deep Research Answer
+              </h3>
+              <div style={styles.markdownContent}>
+                <ReactMarkdown>{deepResearchResult.content}</ReactMarkdown>
+              </div>
+            </div>
+
+            {/* Action: Try normal learning */}
+            <div style={styles.actionRow}>
+              <button
+                onClick={() => handleAsk("explain")}
+                style={styles.actionBtn}
+                disabled={loading}
+              >
+                📚 Also try Simple Learning
+              </button>
+              <button
+                onClick={() => handleAsk("quiz")}
+                style={styles.actionBtn}
+                disabled={loading}
+              >
+                🧠 Take Quiz on this topic
+              </button>
+            </div>
           </div>
         )}
 
@@ -882,5 +1039,173 @@ const styles = {
     borderRadius: "8px",
     cursor: "pointer",
     fontWeight: "500",
+  },
+  // Deep Research Styles
+  buttonRow: {
+    display: "flex",
+    gap: "12px",
+    flexWrap: "wrap",
+  },
+  deepResearchBtn: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "12px",
+    flex: 1,
+    padding: "18px",
+    fontSize: "1rem",
+    fontWeight: "600",
+    border: "2px solid #667eea",
+    borderRadius: "16px",
+    background: "linear-gradient(135deg, rgba(102,126,234,0.1), rgba(118,75,162,0.1))",
+    color: "#667eea",
+    cursor: "pointer",
+    transition: "all 0.2s",
+  },
+  deepResearchLabel: {
+    fontSize: "0.85rem",
+    opacity: 0.9,
+    textTransform: "uppercase",
+    letterSpacing: "1px",
+    background: "rgba(255,255,255,0.2)",
+    padding: "4px 12px",
+    borderRadius: "20px",
+  },
+  agenticSteps: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+    marginTop: "20px",
+    textAlign: "left",
+    maxWidth: "400px",
+    margin: "20px auto 0",
+  },
+  agenticStep: {
+    padding: "10px 16px",
+    background: "#f3f4f6",
+    borderRadius: "8px",
+    fontSize: "0.9rem",
+    color: "#6b7280",
+    animation: "fadeIn 0.5s ease-in",
+  },
+  agenticMeta: {
+    display: "flex",
+    gap: "16px",
+    padding: "16px 32px",
+    background: "#f9fafb",
+    borderBottom: "1px solid #e5e7eb",
+    flexWrap: "wrap",
+  },
+  metaItem: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    padding: "8px 16px",
+    background: "white",
+    borderRadius: "20px",
+    fontSize: "0.9rem",
+    fontWeight: "500",
+    border: "1px solid #e5e7eb",
+  },
+  metaIcon: {
+    fontSize: "1.1rem",
+  },
+  subQueriesBox: {
+    padding: "20px 32px",
+    borderBottom: "1px solid #e5e7eb",
+  },
+  subQueriesTitle: {
+    fontSize: "1rem",
+    fontWeight: "600",
+    marginBottom: "12px",
+    color: "#374151",
+  },
+  subQueriesList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+  },
+  subQueryItem: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    padding: "10px 16px",
+    background: "#eff6ff",
+    borderRadius: "8px",
+    border: "1px solid #bfdbfe",
+  },
+  subQueryNum: {
+    width: "24px",
+    height: "24px",
+    background: "#3b82f6",
+    color: "white",
+    borderRadius: "50%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "0.8rem",
+    fontWeight: "700",
+    flexShrink: 0,
+  },
+  traceBox: {
+    padding: "20px 32px",
+    borderBottom: "1px solid #e5e7eb",
+    background: "#fefce8",
+  },
+  traceTitle: {
+    fontSize: "1rem",
+    fontWeight: "600",
+    marginBottom: "12px",
+    color: "#374151",
+  },
+  traceList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+  },
+  traceStep: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    padding: "8px 12px",
+    fontSize: "0.9rem",
+    color: "#4b5563",
+  },
+  traceDot: {
+    width: "8px",
+    height: "8px",
+    borderRadius: "50%",
+    background: "#f59e0b",
+    flexShrink: 0,
+  },
+  contentCard: {
+    padding: "32px",
+  },
+  cardHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    fontSize: "1.2rem",
+    fontWeight: "600",
+    marginBottom: "16px",
+    color: "#1f2937",
+  },
+  actionRow: {
+    display: "flex",
+    gap: "12px",
+    padding: "20px 32px",
+    borderTop: "1px solid #e5e7eb",
+    background: "#f9fafb",
+  },
+  actionBtn: {
+    flex: 1,
+    padding: "14px 20px",
+    background: "white",
+    border: "2px solid #e5e7eb",
+    borderRadius: "12px",
+    cursor: "pointer",
+    fontWeight: "600",
+    fontSize: "0.95rem",
+    transition: "all 0.2s",
   },
 };

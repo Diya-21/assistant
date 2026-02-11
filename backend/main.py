@@ -33,6 +33,7 @@ from backend.agents.progress_agent import (
     get_analytics
 )
 from backend.agents.performance_analyzer import get_performance_analysis
+from backend.agents.agentic_rag import agentic_answer
 from typing import Optional
 
 app = FastAPI(title="Multimodal AI Teaching Assistant")
@@ -158,6 +159,52 @@ async def learn(
         return {
             "stage": "ERROR",
             "content": f"⚠️ Error processing request: {str(e)}"
+        }
+
+# ---------- AGENTIC RAG (Deep Research) ----------
+@app.post("/deep-research/")
+async def deep_research(
+    question: str = Form(...),
+    user_id: str = Form("default_user")
+):
+    """
+    Agentic RAG endpoint for complex questions.
+    Uses multi-step reasoning with:
+    - Query planning (breaks question into sub-queries)
+    - Multi-query retrieval (searches multiple times)
+    - Self-evaluation (checks answer quality)
+    - Iterative refinement (improves if needed)
+    """
+    try:
+        print(f"🧠 Agentic RAG request: question={question}, user={user_id}")
+        
+        result = agentic_answer(question, use_planning=True)
+        
+        print(f"✅ Agentic RAG completed: iterations={result.get('iterations')}, sources={result.get('sources_used')}")
+        
+        # Track progress
+        try:
+            track_activity(user_id, question, "deep_research")
+            print(f"📊 Deep research tracked for {user_id}")
+        except Exception as e:
+            print(f"⚠️ Progress tracking failed: {e}")
+        
+        return {
+            "stage": "DEEP_RESEARCH",
+            "content": result.get("answer", ""),
+            "reasoning_trace": result.get("reasoning_trace", []),
+            "sub_queries": result.get("sub_queries", []),
+            "iterations": result.get("iterations", 1),
+            "sources_used": result.get("sources_used", 0)
+        }
+    
+    except Exception as e:
+        print(f"❌ Agentic RAG error: {e}")
+        print(traceback.format_exc())
+        return {
+            "stage": "ERROR",
+            "content": f"⚠️ Error: {str(e)}",
+            "reasoning_trace": []
         }
 
 # ---------- LAB AGENT ----------
