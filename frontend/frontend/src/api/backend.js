@@ -81,6 +81,23 @@ export async function deepResearch(question) {
   return res.json();
 }
 
+/* ---------- Follow-up Chat ---------- */
+export async function followUpChat(topic, question, context = "", mode = "chat") {
+  const form = new FormData();
+  form.append("topic", topic);
+  form.append("question", question);
+  form.append("context", context);
+  form.append("mode", mode);
+  form.append("user_id", getUserIdLocal());
+
+  const res = await fetch(`${API_BASE}/follow-up/`, {
+    method: "POST",
+    body: form,
+  });
+
+  return res.json();
+}
+
 const BASE = "http://127.0.0.1:8000";
 
 // Generate a simple user ID (in production, use proper auth)

@@ -207,6 +207,111 @@ async def deep_research(
             "reasoning_trace": []
         }
 
+# ---------- FOLLOW-UP CHAT ----------
+@app.post("/follow-up/")
+async def follow_up_chat(
+    topic: str = Form(...),
+    question: str = Form(...),
+    context: str = Form(""),
+    mode: str = Form("chat"),
+    user_id: str = Form("default_user")
+):
+    """
+    Follow-up chat endpoint with multiple modes:
+    - chat: Normal follow-up question
+    - summary: Generate a concise summary
+    - diagram: Generate ASCII/text diagrams
+    - agentic: Use Agentic RAG for deep research
+    - videos: Provide YouTube video references
+    - quiz: Generate a testing quiz
+    """
+    try:
+        print(f"💬 Follow-up [{mode}]: topic={topic}, question={question[:50]}...")
+        
+        # Build context from syllabus if available
+        syllabus_context = ""
+        try:
+            retriever = get_retriever()
+            if retriever:
+                docs = retriever.invoke(f"{topic} {question}")
+                if docs:
+                    syllabus_context = "\n\n".join(d.page_content for d in docs[:3])
+        except Exception as e:
+            print(f"⚠️ Retriever not available: {e}")
+
+        # Combined context for agents
+        combined_context = f"Topic Context: {topic}\n\nSyllabus Info:\n{syllabus_context}\n\nPrevious Conversation:\n{context}"
+
+        # 1. Videos Mode
+        if mode == "videos":
+            search_query = f"{topic} tutorial explanation".replace(" ", "+")
+            content = f"""### 🎥 Recommended YouTube Resources for **{topic}**
+
+I've found some useful search paths for you to explore this topic visually:
+
+1. **Comprehensive Tutorial**: [Watch on YouTube](https://www.youtube.com/results?search_query={search_query})
+2. **Crash Course / Fast Explanation**: [Quick Explanation](https://www.youtube.com/results?search_query={topic.replace(" ", "+")}+in+5+minutes)
+3. **Advanced Concepts & Implementation**: [Advanced Deep Dive](https://www.youtube.com/results?search_query={topic.replace(" ", "+")}+advanced+tutorial)
+
+*Check these out to get a visual understanding of the concepts we just discussed!*"""
+            return {"stage": "VIDEOS", "content": content}
+
+        # 2. Quiz Mode
+        if mode == "quiz":
+            from backend.agents.learning_agent import learning_flow
+            return learning_flow(combined_context, topic, "quiz")
+
+        # 3. Agentic Mode
+        if mode == "agentic":
+            result = agentic_answer(question, use_planning=True)
+            try:
+                track_activity(user_id, f"Agentic: {question}", "deep_research")
+            except:
+                pass
+            return {
+                "stage": "DEEP_RESEARCH",
+                "content": result.get("answer", ""),
+                "reasoning_trace": result.get("reasoning_trace", []),
+                "sub_queries": result.get("sub_queries", []),
+                "iterations": result.get("iterations", 1),
+                "sources_used": result.get("sources_used", 0)
+            }
+        
+        # 4. Standard Prompts (Summary, Diagram, Chat)
+        if mode == "summary":
+            full_prompt = f"Summarize {topic} concisely with key points and recap."
+            question_text = f"Summarize {topic}"
+        elif mode == "diagram":
+            full_prompt = "Create ASCII/text diagrams (architecture, table, tree) for " + topic
+            question_text = f"Create diagrams for {topic}"
+        else:
+            full_prompt = f"Answer follow-up: {question}"
+            question_text = question
+
+        from backend.agents.qa_agent import generate_answer
+        answer = generate_answer(
+            context=combined_context, 
+            question=full_prompt
+        )
+        
+        # Track activity
+        try:
+            track_activity(user_id, f"{mode}: {topic}", mode)
+        except: pass
+        
+        return {
+            "stage": mode.upper(),
+            "content": answer
+        }
+    
+    except Exception as e:
+        print(f"❌ Follow-up error: {e}")
+        print(traceback.format_exc())
+        return {
+            "stage": "ERROR",
+            "content": f"⚠️ Error: {str(e)}"
+        }
+
 # ---------- LAB AGENT ----------
 @app.post("/lab/")
 async def lab_agent(
