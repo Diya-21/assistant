@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
 :root {
   --primary: #667eea;
   --primary-dark: #764ba2;
@@ -181,6 +183,129 @@ button:disabled:hover {
   border-left: 4px solid #10b981;
 }
 
+/* ---------- Markdown Content Styles ---------- */
+
+/* Ensure rendered markdown has clean, readable typography */
+.msg-content h1,
+.msg-content h2,
+.msg-content h3,
+.msg-content h4 {
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+
+.msg-content h2 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #1e293b;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 6px;
+}
+
+.msg-content h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.msg-content p {
+  margin: 6px 0;
+  font-size: 0.92rem;
+  line-height: 1.7;
+  color: #374151;
+}
+
+.msg-content ul,
+.msg-content ol {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.msg-content li {
+  margin-bottom: 4px;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.msg-content strong {
+  color: #1e293b;
+}
+
+/* Markdown Tables */
+.msg-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 0.88rem;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.msg-content thead {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+}
+
+.msg-content th {
+  padding: 10px 14px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+}
+
+.msg-content td {
+  padding: 10px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #374151;
+}
+
+.msg-content tbody tr:nth-child(even) {
+  background: #f8fafc;
+}
+
+.msg-content tbody tr:hover {
+  background: #eef2ff;
+}
+
+/* Code blocks */
+.msg-content pre {
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 16px 20px;
+  border-radius: 12px;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 10px 0;
+}
+
+.msg-content code {
+  font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.85rem;
+}
+
+.msg-content p code,
+.msg-content li code {
+  background: #eef2ff;
+  color: #4338ca;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.84rem;
+}
+
+/* Blockquotes */
+.msg-content blockquote {
+  border-left: 3px solid #667eea;
+  margin: 10px 0;
+  padding: 8px 16px;
+  background: #f8fafc;
+  border-radius: 0 8px 8px 0;
+  color: #475569;
+  font-size: 0.9rem;
+}
+
 /* ---------- Animations ---------- */
 
 @keyframes spin {
@@ -190,6 +315,22 @@ button:disabled:hover {
 
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  33% {
+    transform: translate(30px, -30px) scale(1.05);
+  }
+
+  66% {
+    transform: translate(-20px, 20px) scale(0.95);
   }
 }
 
@@ -293,4 +434,51 @@ button:disabled:hover {
   textarea {
     padding: 14px 16px;
   }
+}
+
+/* ---------- Action Pills (Theory Page) ---------- */
+.action-pill {
+  padding: 10px 20px !important;
+  border-radius: 12px !important;
+  border: 1px solid #e2e8f0 !important;
+  background: white !important;
+  color: #334155 !important;
+  font-size: 0.9rem !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.02) !important;
+  margin: 0 !important;
+}
+
+.action-pill:hover {
+  background: #f8fafc !important;
+  border-color: #6366f1 !important;
+  color: #4f46e5 !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1) !important;
+}
+
+/* ---------- Project Cards ---------- */
+.project-card {
+  background: white;
+  padding: 24px;
+  border-radius: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+
+.project-card:hover {
+  transform: translateY(-5px);
+  border-color: #6366f1;
+}
+
+.project-card.selected {
+  border-color: #667eea;
+  box-shadow: 0 8px 30px rgba(102, 126, 234, 0.2);
 }

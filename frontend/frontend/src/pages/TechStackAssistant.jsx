@@ -1,29 +1,42 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { getTechStack, compareTech, explainTech, getCodeHelp } from "../api/backend";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { useAppContext } from "../context/AppContext";
 
 export default function TechStackAssistant() {
-    const [activeMode, setActiveMode] = useState("recommend");
+    const { savePageState, getPageState } = useAppContext();
+    const cached = getPageState("techStack");
+
+    const [activeMode, setActiveMode] = useState(cached?.activeMode || "recommend");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [result, setResult] = useState(null);
+    const [result, setResult] = useState(cached?.result || null);
 
     // Recommend state
-    const [projectType, setProjectType] = useState("");
-    const [requirements, setRequirements] = useState("");
+    const [projectType, setProjectType] = useState(cached?.projectType || "");
+    const [requirements, setRequirements] = useState(cached?.requirements || "");
 
     // Compare state
-    const [tech1, setTech1] = useState("");
-    const [tech2, setTech2] = useState("");
-    const [compareContext, setCompareContext] = useState("");
+    const [tech1, setTech1] = useState(cached?.tech1 || "");
+    const [tech2, setTech2] = useState(cached?.tech2 || "");
+    const [compareContext, setCompareContext] = useState(cached?.compareContext || "");
 
     // Explain state
-    const [concept, setConcept] = useState("");
+    const [concept, setConcept] = useState(cached?.concept || "");
     const [depth, setDepth] = useState("intermediate");
 
     // Code help state
-    const [task, setTask] = useState("");
-    const [technology, setTechnology] = useState("");
+    const [task, setTask] = useState(cached?.task || "");
+    const [technology, setTechnology] = useState(cached?.technology || "");
+
+    // Persist page state on changes
+    useEffect(() => {
+        if (result || projectType || tech1 || concept || task) {
+            savePageState("techStack", { activeMode, result, projectType, requirements, tech1, tech2, compareContext, concept, task, technology });
+        }
+    }, [activeMode, result, projectType, requirements, tech1, tech2, compareContext, concept, task, technology]);
+
 
     const handleSubmit = async () => {
         setLoading(true);
@@ -268,8 +281,8 @@ export default function TechStackAssistant() {
                             {activeMode === "code" && `💻 ${task}`}
                         </h2>
                     </div>
-                    <div style={styles.resultContent}>
-                        <ReactMarkdown>{getResultContent()}</ReactMarkdown>
+                    <div className="msg-content" style={styles.resultContent}>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{getResultContent()}</ReactMarkdown>
                     </div>
 
                     {/* Template info for recommend */}

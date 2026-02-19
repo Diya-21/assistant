@@ -3,46 +3,42 @@ from backend.agents.qa_agent import generate_answer
 # ---------- ENHANCED PROMPTS ----------
 
 LAB_EXPLANATION_PROMPT = """
-You are a university lab instructor explaining an experiment to a student.
+You are a friendly and expert university lab instructor. You are explaining a technical experiment to a curious student. Your goal is to make it crystal clear, engaging, and visual.
 
-Provide a structured explanation using this format:
+Provide a highly structured and conversational explanation using this format:
 
 ## 🎯 Aim
-State the objective of this experiment in one clear sentence.
+A single, clear sentence explaining what we are trying to achieve.
 
-## 📚 Theory & Background
+## 📊 Visual logic (Flowchart)
+Include a Mermaid flowchart that shows the logical sequence of the experiment.
+Example:
+```mermaid
+graph TD
+    A[Start] --> B[Input Data]
+    B --> C{Condition?}
+    C -- Yes --> D[Result A]
+    C -- No --> E[Result B]
+```
 
-### What is this about?
-Explain the core concept behind this experiment in 2-3 paragraphs.
+## 📚 Theory & Concept
+### What is the core idea?
+Explain the fundamental concept in a way that's easy to grasp. Use an analogy if helpful.
 
-### Why is it important?
-- Reason 1: Brief explanation
-- Reason 2: Brief explanation
-- Reason 3: Brief explanation
+### Why does this matter?
+Explain the real-world significance of this lab.
 
 ## 🔧 How It Works
-
-### Overview
-A high-level explanation of the approach/technique.
-
 ### Key Components
-- **Component 1**: What it does
-- **Component 2**: What it does
-- **Component 3**: What it does
+Describe the "moving parts" of the experiment.
 
 ### Process Flow
-1. Step 1 - What happens
-2. Step 2 - What happens
-3. Step 3 - What happens
+Step-by-step logic of how the experiment proceeds.
 
-## 📊 Expected Outcomes
-What results should the student expect after completing this experiment?
+## 🏁 Expected Outcomes
+What will we see at the end? Describe the final results.
 
-## 🔗 Related Concepts
-- Concept 1 - Brief connection
-- Concept 2 - Brief connection
-
-Keep the explanation clear, academic, and suitable for a lab record. DO NOT include any code.
+Keep the tone encouraging and academic yet accessible. Focus on "human-style" teaching. Use clear headings and bullet points. DO NOT include raw code (that comes in the next step).
 """
 
 PSEUDOCODE_PROMPT = """
@@ -158,6 +154,29 @@ Format your response:
 Focus on testing deep understanding, not superficial knowledge.
 """
 
+SUMMARY_PROMPT = """
+Generate a concise, "human-style" quick summary of this lab experiment for a student's final revision.
+
+Use this structure:
+## 📝 Lab Summary
+
+### 💡 The Big Picture
+A 2-sentence summary of the core objective and outcome.
+
+### 🔑 Key Takeaways
+- **Point 1**: Most important learning
+- **Point 2**: Crucial technical detail
+- **Point 3**: Critical viva point
+
+### ⚡ Quick Steps
+A very brief bullet-list of the experimental procedure.
+
+### ⚠️ Common Pitfalls
+What should students be careful about during this lab?
+
+Keep it punchy, high-impact, and very easy to read. act as a friendly senior student giving tips to a junior.
+"""
+
 # ---------- INTERNAL HELPERS ----------
 
 def _explain(context, experiment):
@@ -176,6 +195,12 @@ def _viva(context, experiment):
     return generate_answer(
         context=context,
         question=f"{VIVA_PROMPT}\n\nExperiment: {experiment}"
+    )
+
+def _summary(context, experiment):
+    return generate_answer(
+        context=context,
+        question=f"{SUMMARY_PROMPT}\n\nExperiment: {experiment}"
     )
 
 # ---------- PUBLIC API ----------
@@ -206,6 +231,13 @@ def generate_lab_explanation(
         return {
             "stage": "VIVA",
             "content": _viva(context, experiment_title),
+            "next": "Do you want a quick summary for revision?"
+        }
+
+    if step == "summary":
+        return {
+            "stage": "SUMMARY",
+            "content": _summary(context, experiment_title),
             "next": "Ask doubts or visit Theory page for more"
         }
 

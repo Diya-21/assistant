@@ -1,7 +1,9 @@
 import { useState, useRef } from "react";
 import { uploadSyllabus } from "../api/backend";
+import { useAppContext } from "../context/AppContext";
 
 export default function UploadSyllabus() {
+  const { setSyllabusUploaded, setSyllabusName } = useAppContext();
   const [file, setFile] = useState(null);
   const [status, setStatus] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
@@ -27,6 +29,8 @@ export default function UploadSyllabus() {
       } else {
         setStatus(res.message || "Syllabus uploaded successfully!");
         setIsSuccess(true);
+        setSyllabusUploaded(true);
+        setSyllabusName(file.name);
       }
     } catch (err) {
       setStatus("Upload failed. Please try again.");
@@ -211,27 +215,6 @@ export default function UploadSyllabus() {
             </div>
           )}
         </div>
-
-        {/* Supported Syllabi */}
-        <div style={styles.supportCard}>
-          <h3 style={styles.supportTitle}>📚 Supported Subjects</h3>
-          <div style={styles.subjectTags}>
-            {[
-              "Big Data Analytics",
-              "Machine Learning",
-              "Data Structures",
-              "Artificial Intelligence",
-              "Deep Learning",
-              "Data Mining",
-              "Natural Language Processing",
-              "Computer Vision",
-            ].map((subject) => (
-              <span key={subject} style={styles.subjectTag}>
-                {subject}
-              </span>
-            ))}
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -240,10 +223,10 @@ export default function UploadSyllabus() {
 const styles = {
   page: {
     minHeight: "100vh",
-    background: "linear-gradient(135deg, #fef3c7 0%, #fde68a 50%, #fcd34d 100%)",
+    background: "linear-gradient(135deg, #eef2ff 0%, #e0e7ff 50%, #c7d2fe 100%)",
   },
   header: {
-    background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)",
+    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
     padding: "48px 24px",
     textAlign: "center",
     color: "white",
@@ -267,13 +250,13 @@ const styles = {
     background: "white",
     borderRadius: "24px",
     padding: "32px",
-    boxShadow: "0 20px 60px rgba(0,0,0,0.1)",
+    boxShadow: "0 20px 60px rgba(102, 126, 234, 0.12)",
   },
   infoBanner: {
     display: "flex",
     gap: "16px",
     padding: "16px 20px",
-    background: "linear-gradient(135deg, #fef3c7, #fde68a)",
+    background: "linear-gradient(135deg, #eef2ff, #e0e7ff)",
     borderRadius: "12px",
     marginBottom: "24px",
   },
@@ -281,21 +264,21 @@ const styles = {
   infoText: {
     margin: "4px 0 0 0",
     fontSize: "0.9rem",
-    color: "#92400e",
+    color: "#4338ca",
   },
   dropZone: {
-    border: "2px dashed #d1d5db",
+    border: "2px dashed #c7d2fe",
     borderRadius: "16px",
     padding: "48px 32px",
     textAlign: "center",
     cursor: "pointer",
     transition: "all 0.2s",
-    background: "#fafafa",
+    background: "#fafaff",
     marginBottom: "24px",
   },
   dropZoneActive: {
-    borderColor: "#f59e0b",
-    background: "#fffbeb",
+    borderColor: "#667eea",
+    background: "#eef2ff",
   },
   dropZoneWithFile: {
     borderColor: "#10b981",
@@ -359,7 +342,7 @@ const styles = {
     fontWeight: "600",
     border: "none",
     borderRadius: "14px",
-    background: "linear-gradient(135deg, #f59e0b, #d97706)",
+    background: "linear-gradient(135deg, #667eea, #764ba2)",
     color: "white",
     transition: "all 0.2s",
   },
@@ -370,6 +353,7 @@ const styles = {
     borderTopColor: "white",
     borderRadius: "50%",
     animation: "spin 1s linear infinite",
+    display: "inline-block",
   },
   statusBox: {
     display: "flex",
@@ -391,13 +375,13 @@ const styles = {
   nextSteps: {
     marginTop: "24px",
     padding: "24px",
-    background: "#f0fdf4",
+    background: "linear-gradient(135deg, #eef2ff, #e8f4f8)",
     borderRadius: "16px",
     textAlign: "center",
   },
   nextStepsTitle: {
     margin: "0 0 12px 0",
-    color: "#065f46",
+    color: "#4338ca",
   },
   featureGrid: {
     display: "grid",
@@ -416,33 +400,9 @@ const styles = {
     color: "#374151",
     fontWeight: "500",
     transition: "transform 0.2s, box-shadow 0.2s",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+    boxShadow: "0 2px 8px rgba(102, 126, 234, 0.08)",
   },
   featureIcon: {
     fontSize: "1.3rem",
-  },
-  supportCard: {
-    marginTop: "24px",
-    background: "white",
-    borderRadius: "20px",
-    padding: "24px",
-    boxShadow: "0 10px 40px rgba(0,0,0,0.06)",
-  },
-  supportTitle: {
-    margin: "0 0 16px 0",
-    fontSize: "1.1rem",
-  },
-  subjectTags: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: "8px",
-  },
-  subjectTag: {
-    padding: "8px 14px",
-    background: "#fef3c7",
-    color: "#92400e",
-    borderRadius: "20px",
-    fontSize: "0.85rem",
-    fontWeight: "500",
   },
 };

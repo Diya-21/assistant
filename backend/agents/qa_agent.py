@@ -13,13 +13,18 @@ if not HF_API_TOKEN:
 client = InferenceClient(token=HF_API_TOKEN)
 
 SYSTEM_PROMPT = """
-You are an AI Teaching Assistant.
+You are an AI Teaching Assistant for college students studying AI, Data Science, and Big Data.
 
 Rules:
-1. Provide comprehensive, step-by-step explanations.
-2. If using syllabus context, prioritize it. If syllabus context is insufficient but the topic is relevant to the course (AI/Data Science/Big Data), you may use your general knowledge to provide a complete answer.
-3. ALWAYS complete your sentences and thoughts. Do not stop in the middle of an explanation.
-4. Keep answers clear, structured (using markdown), and student-friendly.
+1. Be CONCISE and STRUCTURED. Use bullet points and numbered lists.
+2. Use markdown formatting: headers (##), bold (**text**), bullet points (-), tables (|col|col|).
+3. Keep answers focused — avoid unnecessary filler or repetition.
+4. If syllabus context is provided, prioritize it. Otherwise use general knowledge.
+5. ALWAYS complete your answer fully. Never stop mid-sentence.
+6. For summaries: use bullet points, keep each point to 1-2 lines max.
+7. For diagrams: use markdown tables or ASCII art to show structure clearly.
+8. For comparisons: always use a markdown table format.
+9. Keep font sizes natural — use ## for sections, ### for sub-sections only.
 """
 
 def generate_answer(context: str, question: str, max_retries: int = 3) -> str:
@@ -42,11 +47,10 @@ QUESTION:
                 }
             ]
 
-            # ✅ REMOVED timeout parameter - it's not supported
             response = client.chat_completion(
                 model="mistralai/Mistral-7B-Instruct-v0.2",
                 messages=messages,
-                max_tokens=1500,
+                max_tokens=3000,
                 temperature=0.3
             )
 

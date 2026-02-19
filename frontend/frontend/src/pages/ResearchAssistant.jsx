@@ -1,16 +1,29 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { researchTopic, searchPapers } from "../api/backend";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { useAppContext } from "../context/AppContext";
 
 export default function ResearchAssistant() {
-    const [topic, setTopic] = useState("");
+    const { savePageState, getPageState } = useAppContext();
+    const cached = getPageState("research");
+
+    const [topic, setTopic] = useState(cached?.topic || "");
     const [includePapers, setIncludePapers] = useState(true);
-    const [research, setResearch] = useState(null);
-    const [papers, setPapers] = useState([]);
+    const [research, setResearch] = useState(cached?.research || null);
+    const [papers, setPapers] = useState(cached?.papers || []);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [activeTab, setActiveTab] = useState("explanation");
-    const [reasoningTrace, setReasoningTrace] = useState([]);
+    const [activeTab, setActiveTab] = useState(cached?.activeTab || "explanation");
+
+
+    // Persist page state on changes
+    useEffect(() => {
+        if (research || topic) {
+            savePageState("research", { topic, research, papers, activeTab });
+        }
+    }, [topic, research, papers, activeTab]);
+
 
     const handleResearch = async () => {
         if (!topic.trim()) return;
@@ -28,7 +41,6 @@ export default function ResearchAssistant() {
             } else {
                 setResearch(result);
                 setPapers(result.papers || []);
-                setReasoningTrace(result.reasoning_trace || []);
             }
         } catch (err) {
             setError("Research failed. Please try again.");
@@ -147,8 +159,8 @@ export default function ResearchAssistant() {
                     {/* Tab Content */}
                     <div style={styles.tabContent}>
                         {activeTab === "explanation" && (
-                            <div style={styles.markdownContent}>
-                                <ReactMarkdown>{research.explanation}</ReactMarkdown>
+                            <div className="msg-content" style={styles.markdownContent}>
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{research.explanation}</ReactMarkdown>
                             </div>
                         )}
 
@@ -198,25 +210,13 @@ export default function ResearchAssistant() {
                         )}
 
                         {activeTab === "directions" && (
-                            <div style={styles.markdownContent}>
-                                <ReactMarkdown>{research.research_directions}</ReactMarkdown>
+                            <div className="msg-content" style={styles.markdownContent}>
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{research.research_directions}</ReactMarkdown>
                             </div>
                         )}
                     </div>
 
-                    {/* Reasoning Trace (Collapsible) */}
-                    {reasoningTrace.length > 0 && (
-                        <details style={styles.traceDetails}>
-                            <summary style={styles.traceSummary}>
-                                🧠 View AI Reasoning ({reasoningTrace.length} steps)
-                            </summary>
-                            <div style={styles.traceContent}>
-                                {reasoningTrace.map((step, i) => (
-                                    <div key={i} style={styles.traceStep}>{step}</div>
-                                ))}
-                            </div>
-                        </details>
-                    )}
+
                 </div>
             )}
         </div>
@@ -442,24 +442,5 @@ const styles = {
         cursor: "pointer",
         fontWeight: "600",
     },
-    traceDetails: {
-        margin: "20px 30px 30px",
-        background: "#f0fdfa",
-        borderRadius: "12px",
-        overflow: "hidden",
-    },
-    traceSummary: {
-        padding: "16px 20px",
-        cursor: "pointer",
-        fontWeight: "600",
-        color: "#0d9488",
-    },
-    traceContent: {
-        padding: "0 20px 20px",
-    },
-    traceStep: {
-        padding: "6px 0",
-        color: "#4b5563",
-        fontSize: "0.9rem",
-    },
+
 };

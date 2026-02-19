@@ -1,19 +1,24 @@
 import { useState, useRef, useEffect } from "react";
 import { learnTopic, deepResearch, followUpChat } from "../api/backend";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { useAppContext } from "../context/AppContext";
 
 export default function LearningAgent() {
-  const [messages, setMessages] = useState([]);
+  const { savePageState, getPageState, syllabusUploaded, syllabusName } = useAppContext();
+  const cached = getPageState("theory");
+
+  const [messages, setMessages] = useState(cached?.messages || []);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [useDeepResearch, setUseDeepResearch] = useState(false);
   const [history, setHistory] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
-  const [currentTopic, setCurrentTopic] = useState("");
+  const [currentTopic, setCurrentTopic] = useState(cached?.currentTopic || "");
 
   // Quiz states
-  const [quizResults, setQuizResults] = useState({}); // { [msgIndex]: { [qId]: selectedIndex } }
-  const [quizScores, setQuizScores] = useState({}); // { [msgIndex]: { score, total } }
+  const [quizResults, setQuizResults] = useState(cached?.quizResults || {});
+  const [quizScores, setQuizScores] = useState(cached?.quizScores || {});
 
   // Multimodal states
   const [isRecording, setIsRecording] = useState(false);
@@ -42,7 +47,15 @@ export default function LearningAgent() {
     catch (e) { console.error("History save error", e); }
   }, [history]);
 
+  // Persist page state on changes
+  useEffect(() => {
+    if (messages.length > 0 || currentTopic) {
+      savePageState("theory", { messages, currentTopic, quizResults, quizScores });
+    }
+  }, [messages, currentTopic, quizResults, quizScores]);
+
   useEffect(() => { inputRef.current?.focus(); }, []);
+
 
   async function handleSend(customMsg = null, isDeep = null) {
     const userMsg = customMsg || input.trim();
@@ -149,7 +162,13 @@ export default function LearningAgent() {
   }
 
   function startNewChat() {
-    setMessages([]); setCurrentTopic(""); setInput(""); setUploadedFile(null); inputRef.current?.focus();
+    if (messages.length > 0 && currentTopic) {
+      setHistory(prev => [...prev, { id: Date.now(), topic: currentTopic, messages, date: new Date().toISOString() }]);
+    }
+    setMessages([]); setCurrentTopic(""); setInput(""); setUploadedFile(null);
+    setQuizResults({}); setQuizScores({});
+    savePageState("theory", null);
+    inputRef.current?.focus();
   }
 
   const handleFileUpload = (e) => {
@@ -255,7 +274,20 @@ export default function LearningAgent() {
                       </div>
                     )}
 
-                    <div style={styles.msgContent}><ReactMarkdown>{msg.content}</ReactMarkdown></div>
+                    <div className="msg-content" style={styles.msgContent}>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          a: ({ node, children, href, ...props }) => (
+                            <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "#667eea", fontWeight: 600 }} {...props}>
+                              {children}
+                            </a>
+                          )
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
 
                     {msg.meta?.type === "quiz" && (
                       <div style={styles.quizInThread}>
@@ -288,10 +320,10 @@ export default function LearningAgent() {
 
                     {msg.role === "assistant" && !loading && (
                       <div style={styles.actionBar}>
-                        <button onClick={() => handleQuickAction("summary")} style={styles.actionBtn}>📝 Generate Summary</button>
-                        <button onClick={() => handleQuickAction("diagram")} style={styles.actionBtn}>📊 Generate Diagram</button>
-                        <button onClick={() => handleQuickAction("videos")} style={styles.actionBtn}>🎥 Video Resources</button>
-                        <button onClick={() => handleQuickAction("quiz")} style={styles.actionBtn}>📝 Take Quiz</button>
+                        <button onClick={() => handleQuickAction("summary")} className="action-pill">📝 Generate Summary</button>
+                        <button onClick={() => handleQuickAction("diagram")} className="action-pill">📊 Generate Diagram</button>
+                        <button onClick={() => handleQuickAction("videos")} className="action-pill">🎥 Video Resources</button>
+                        <button onClick={() => handleQuickAction("quiz")} className="action-pill">📝 Take Quiz</button>
                       </div>
                     )}
 

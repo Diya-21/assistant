@@ -1,4 +1,18 @@
-const API_BASE = "http://127.0.0.1:8000";
+const API_BASE = "http://127.0.0.1:8080";
+const BASE_URL = "http://127.0.0.1:8080";
+const BASE = "http://127.0.0.1:8080";
+
+// Helper to get user ID consistently
+function getUserIdLocal() {
+  let userId = localStorage.getItem('user_id');
+  if (!userId) {
+    userId = 'user_' + Math.random().toString(36).substr(2, 9);
+    localStorage.setItem('user_id', userId);
+  }
+  return userId;
+}
+
+const getUserId = getUserIdLocal;
 
 /* ---------- Upload Syllabus ---------- */
 export async function uploadSyllabus(file) {
@@ -33,7 +47,7 @@ export async function runLab(experiment, step = "explanation") {
   form.append("step", step);
   form.append("user_id", getUserIdLocal());
 
-  const res = await fetch("http://127.0.0.1:8000/lab/", {
+  const res = await fetch(`${API_BASE}/lab/`, {
     method: "POST",
     body: form,
   });
@@ -41,25 +55,14 @@ export async function runLab(experiment, step = "explanation") {
   return res.json();
 }
 
-// Helper to get user ID consistently
-function getUserIdLocal() {
-  let userId = localStorage.getItem('user_id');
-  if (!userId) {
-    userId = 'user_' + Math.random().toString(36).substr(2, 9);
-    localStorage.setItem('user_id', userId);
-  }
-  return userId;
-}
-
-const BASE_URL = "http://127.0.0.1:8000";
-
+/* ---------- Learning Flow ---------- */
 export async function learnTopic(topic, stage = "explain") {
   const form = new FormData();
   form.append("topic", topic);
   form.append("stage", stage);
   form.append("user_id", getUserIdLocal());
 
-  const res = await fetch(`${BASE_URL}/learn/`, {
+  const res = await fetch(`${API_BASE}/learn/`, {
     method: "POST",
     body: form,
   });
@@ -98,18 +101,6 @@ export async function followUpChat(topic, question, context = "", mode = "chat")
   return res.json();
 }
 
-const BASE = "http://127.0.0.1:8000";
-
-// Generate a simple user ID (in production, use proper auth)
-const getUserId = () => {
-  let userId = localStorage.getItem('user_id');
-  if (!userId) {
-    userId = 'user_' + Math.random().toString(36).substr(2, 9);
-    localStorage.setItem('user_id', userId);
-  }
-  return userId;
-};
-
 /* ---------- Progress Tracking ---------- */
 export async function trackProgress(topic, activityType, score = null, total = null) {
   const form = new FormData();
@@ -142,10 +133,12 @@ export async function getAnalytics() {
   return res.json();
 }
 
-/* ============================================================
-   PROJECT ASSISTANT APIs
-   ============================================================ */
+export async function getPerformance() {
+  const res = await fetch(`${API_BASE}/performance/${getUserId()}`);
+  return res.json();
+}
 
+/* ---------- Project Assistant ---------- */
 export async function getProjectIdeas(subjects) {
   const form = new FormData();
   form.append("subjects", subjects);
@@ -171,10 +164,7 @@ export async function getProjectDetail(projectTitle, stage = "detailed") {
   return res.json();
 }
 
-/* ============================================================
-   RESEARCH ASSISTANT APIs
-   ============================================================ */
-
+/* ---------- Research Assistant ---------- */
 export async function researchTopic(topic, includePapers = true) {
   const form = new FormData();
   form.append("topic", topic);
@@ -200,10 +190,7 @@ export async function searchPapers(query) {
   return res.json();
 }
 
-/* ============================================================
-   TECH STACK ASSISTANT APIs
-   ============================================================ */
-
+/* ---------- Tech Stack Assistant ---------- */
 export async function getTechStack(projectType, requirements = "") {
   const form = new FormData();
   form.append("project_type", projectType);

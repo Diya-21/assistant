@@ -190,11 +190,33 @@ Context:
         try:
             cleaned = self._clean_json(raw_response)
             projects_data = json.loads(cleaned)
-            reasoning_trace.append(f"✅ Generated {len(projects_data.get('projects', []))} project ideas")
+            
+            # Flexible key detection
+            projects = []
+            if isinstance(projects_data, list):
+                projects = projects_data
+            elif isinstance(projects_data, dict):
+                # Try common keys
+                for key in ["projects", "ideas", "project_ideas", "suggestions"]:
+                    if key in projects_data and isinstance(projects_data[key], list):
+                        projects = projects_data[key]
+                        break
+                if not projects and len(projects_data) == 1:
+                    # If only one key and it's a list, use it
+                    first_val = list(projects_data.values())[0]
+                    if isinstance(first_val, list):
+                        projects = first_val
+            
+            if not projects:
+                # If still no projects, maybe it's just a raw list of dicts that got wrapped or something
+                if isinstance(projects_data, dict) and "id" in projects_data:
+                    projects = [projects_data]
+
+            reasoning_trace.append(f"✅ Generated {len(projects)} project ideas")
             
             return {
                 "stage": "IDEAS",
-                "projects": projects_data.get("projects", []),
+                "projects": projects,
                 "subjects_analyzed": subject_list,
                 "reasoning_trace": reasoning_trace
             }

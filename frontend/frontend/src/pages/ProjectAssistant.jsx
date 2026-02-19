@@ -1,16 +1,33 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { getProjectIdeas, getProjectDetail } from "../api/backend";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { useAppContext } from "../context/AppContext";
+import { followUpChat } from "../api/backend";
 
 export default function ProjectAssistant() {
-    const [subjects, setSubjects] = useState("");
-    const [projects, setProjects] = useState([]);
-    const [selectedProject, setSelectedProject] = useState(null);
-    const [projectDetail, setProjectDetail] = useState(null);
+    const { savePageState, getPageState } = useAppContext();
+    const cached = getPageState("projects");
+
+    const [subjects, setSubjects] = useState(cached?.subjects || "");
+    const [projects, setProjects] = useState(cached?.projects || []);
+    const [selectedProject, setSelectedProject] = useState(cached?.selectedProject || null);
+    const [projectDetail, setProjectDetail] = useState(cached?.projectDetail || null);
+    const [projectChat, setProjectChat] = useState(cached?.projectChat || {}); // { [projectTitle]: [messages] }
+    const [chatInput, setChatInput] = useState("");
+    const [chatLoading, setChatLoading] = useState(false);
     const [detailStage, setDetailStage] = useState("detailed");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [reasoningTrace, setReasoningTrace] = useState([]);
+
+
+    // Persist page state on changes
+    useEffect(() => {
+        if (projects.length > 0 || subjects) {
+            savePageState("projects", { subjects, projects, selectedProject, projectDetail, projectChat });
+        }
+    }, [subjects, projects, selectedProject, projectDetail, projectChat]);
+
 
     const handleGetIdeas = async () => {
         if (!subjects.trim()) return;
@@ -26,17 +43,45 @@ export default function ProjectAssistant() {
 
             if (result.stage === "ERROR") {
                 setError(result.content);
-            } else if (result.projects) {
+            } else if (result.projects && result.projects.length > 0) {
                 setProjects(result.projects);
-                setReasoningTrace(result.reasoning_trace || []);
             } else if (result.content) {
-                // Fallback if JSON parsing failed on backend
+                // Fallback if JSON parsing failed on backend but we got content
                 setProjectDetail({ content: result.content });
+                // We also set a dummy project to trigger the detail panel visibility
+                setSelectedProject({ title: "Generated Projects (Markdown)", id: "txt" });
+            } else {
+                setError("No projects were generated. Please try again with different subjects.");
             }
         } catch (err) {
             setError("Failed to get project ideas. Please try again.");
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleProjectChat = async () => {
+        if (!chatInput.trim() || !selectedProject) return;
+
+        const userMsg = { role: "user", content: chatInput, timestamp: new Date().toISOString() };
+        const projectTitle = selectedProject.title;
+        const currentMsgs = projectChat[projectTitle] || [];
+        const newMsgs = [...currentMsgs, userMsg];
+
+        setProjectChat(prev => ({ ...prev, [projectTitle]: newMsgs }));
+        setChatInput("");
+        setChatLoading(true);
+
+        try {
+            const contextStr = newMsgs.map(m => `${m.role === "user" ? "Student" : "Assistant"}: ${m.content}`).join("\n");
+            const data = await followUpChat(projectTitle, userMsg.content, contextStr, "chat");
+
+            const aiMsg = { role: "assistant", content: data.content, timestamp: new Date().toISOString() };
+            setProjectChat(prev => ({ ...prev, [projectTitle]: [...newMsgs, aiMsg] }));
+        } catch (err) {
+            setError("Failed to get chat response.");
+        } finally {
+            setChatLoading(false);
         }
     };
 
@@ -83,12 +128,12 @@ export default function ProjectAssistant() {
             {/* Input Section */}
             <div style={styles.inputSection}>
                 <div style={styles.inputGroup}>
-                    <label style={styles.label}>Enter your subjects (comma-separated)</label>
+                    <label style={styles.label}>Enter your subject or topic</label>
                     <input
                         type="text"
                         value={subjects}
                         onChange={(e) => setSubjects(e.target.value)}
-                        placeholder="e.g., Machine Learning, Data Structures, Computer Networks"
+                        placeholder="e.g., Machine Learning, AAI, Data Structures"
                         style={styles.input}
                         onKeyPress={(e) => e.key === "Enter" && handleGetIdeas()}
                     />
@@ -105,15 +150,6 @@ export default function ProjectAssistant() {
             {/* Error Display */}
             {error && <div style={styles.error}>{error}</div>}
 
-            {/* Reasoning Trace */}
-            {reasoningTrace.length > 0 && (
-                <div style={styles.traceBox}>
-                    <h4 style={styles.traceTitle}>🧠 AI Reasoning</h4>
-                    {reasoningTrace.map((step, i) => (
-                        <div key={i} style={styles.traceStep}>{step}</div>
-                    ))}
-                </div>
-            )}
 
             {/* Projects Grid */}
             {projects.length > 0 && (
@@ -123,31 +159,27 @@ export default function ProjectAssistant() {
                         {projects.map((project, index) => (
                             <div
                                 key={index}
-                                style={{
-                                    ...styles.projectCard,
-                                    ...(selectedProject?.id === project.id ? styles.projectCardSelected : {})
-                                }}
+                                className={`project-card ${selectedProject?.title === project.title ? "selected" : ""}`}
                                 onClick={() => handleSelectProject(project)}
                             >
-                                <div style={styles.projectHeader}>
-                                    <span style={styles.projectNumber}>#{project.id}</span>
+                                <div style={styles.cardHeader}>
                                     <span style={{
-                                        ...styles.difficultyBadge,
+                                        ...styles.difficultyTag,
                                         background: getDifficultyColor(project.difficulty)
                                     }}>
-                                        {project.difficulty}
+                                        {project.difficulty || "Medium"}
                                     </span>
                                 </div>
-                                <h3 style={styles.projectTitle}>{project.title}</h3>
-                                <p style={styles.projectDesc}>{project.description}</p>
-                                <div style={styles.subjectsUsed}>
-                                    {project.subjects_used?.map((subject, i) => (
+                                <h3 style={styles.projectTitle}>{project.title || "Untitled Project"}</h3>
+                                <p style={styles.projectDesc}>{project.description || ""}</p>
+                                <div style={styles.subjects}>
+                                    {(project.subjects || project.subjects_used || []).map((subject, i) => (
                                         <span key={i} style={styles.subjectTag}>{subject}</span>
                                     ))}
                                 </div>
-                                {project.innovation && (
+                                {(project.innovation || project.innovation_factor) && (
                                     <div style={styles.innovation}>
-                                        <strong>✨ Innovation:</strong> {project.innovation}
+                                        💡 {project.innovation || project.innovation_factor}
                                     </div>
                                 )}
                             </div>
@@ -162,10 +194,10 @@ export default function ProjectAssistant() {
                     <div style={styles.detailHeader}>
                         <h2 style={styles.detailTitle}>📌 {selectedProject.title}</h2>
                         <div style={styles.stageTabs}>
-                            {["detailed", "roadmap", "concepts"].map((stage) => (
+                            {["detailed", "roadmap", "concepts", "chat"].map((stage) => (
                                 <button
                                     key={stage}
-                                    onClick={() => handleChangeStage(stage)}
+                                    onClick={() => stage === "chat" ? setDetailStage("chat") : handleChangeStage(stage)}
                                     style={{
                                         ...styles.stageTab,
                                         ...(detailStage === stage ? styles.stageTabActive : {})
@@ -174,6 +206,7 @@ export default function ProjectAssistant() {
                                     {stage === "detailed" && "📋 Details"}
                                     {stage === "roadmap" && "🗺️ Roadmap"}
                                     {stage === "concepts" && "📚 Concepts"}
+                                    {stage === "chat" && "💬 Chat"}
                                 </button>
                             ))}
                         </div>
@@ -184,9 +217,38 @@ export default function ProjectAssistant() {
                             <div style={styles.spinner}></div>
                             <p>Loading {detailStage} information...</p>
                         </div>
+                    ) : detailStage === "chat" ? (
+                        <div style={styles.chatContainer}>
+                            <div style={styles.chatMessages}>
+                                {(projectChat[selectedProject.title] || []).length === 0 && (
+                                    <div style={styles.aiBubble}>
+                                        👋 Hi! I'm your project assistant. You can ask me anything about <strong>{selectedProject.title}</strong>. I can help with architecture, implementation steps, or explaining specific concepts!
+                                    </div>
+                                )}
+                                {(projectChat[selectedProject.title] || []).map((msg, idx) => (
+                                    <div key={idx} style={{ ...styles.msgBubble, ...(msg.role === "user" ? styles.userBubble : styles.aiBubble) }}>
+                                        <div style={styles.msgRole}>{msg.role === "user" ? "👤 You" : "🤖 Assistant"}</div>
+                                        <div className="msg-content"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
+                                    </div>
+                                ))}
+                                {chatLoading && <div style={styles.aiBubble}>...thinking</div>}
+                            </div>
+                            <div style={styles.chatInputRow}>
+                                <input
+                                    style={styles.chatInput}
+                                    value={chatInput}
+                                    onChange={(e) => setChatInput(e.target.value)}
+                                    placeholder="Ask anything about this project..."
+                                    onKeyPress={(e) => e.key === "Enter" && handleProjectChat()}
+                                />
+                                <button onClick={handleProjectChat} disabled={chatLoading} style={styles.chatSendBtn}>
+                                    {chatLoading ? "⏳" : "➤"}
+                                </button>
+                            </div>
+                        </div>
                     ) : projectDetail?.content ? (
-                        <div style={styles.detailContent}>
-                            <ReactMarkdown>{projectDetail.content}</ReactMarkdown>
+                        <div className="msg-content" style={styles.detailContent}>
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{projectDetail.content}</ReactMarkdown>
                         </div>
                     ) : null}
                 </div>
@@ -271,21 +333,7 @@ const styles = {
         borderRadius: "12px",
         marginBottom: "20px",
     },
-    traceBox: {
-        background: "rgba(102, 126, 234, 0.1)",
-        padding: "20px",
-        borderRadius: "12px",
-        marginBottom: "30px",
-    },
-    traceTitle: {
-        margin: "0 0 12px 0",
-        color: "#667eea",
-    },
-    traceStep: {
-        padding: "6px 0",
-        color: "#4b5563",
-        fontSize: "0.9rem",
-    },
+
     projectsSection: {
         marginBottom: "40px",
     },
@@ -313,7 +361,7 @@ const styles = {
         borderColor: "#667eea",
         boxShadow: "0 8px 30px rgba(102, 126, 234, 0.2)",
     },
-    projectHeader: {
+    cardHeader: {
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
@@ -324,7 +372,7 @@ const styles = {
         fontSize: "0.9rem",
         fontWeight: "600",
     },
-    difficultyBadge: {
+    difficultyTag: {
         padding: "4px 12px",
         borderRadius: "20px",
         color: "white",
@@ -343,7 +391,7 @@ const styles = {
         lineHeight: "1.5",
         marginBottom: "12px",
     },
-    subjectsUsed: {
+    subjects: {
         display: "flex",
         flexWrap: "wrap",
         gap: "8px",
@@ -416,5 +464,66 @@ const styles = {
         borderRadius: "50%",
         margin: "0 auto 20px",
         animation: "spin 1s linear infinite",
+    },
+    chatContainer: {
+        display: "flex",
+        flexDirection: "column",
+        height: "500px",
+        background: "#f8fafc",
+    },
+    chatMessages: {
+        flex: 1,
+        overflowY: "auto",
+        padding: "20px",
+        display: "flex",
+        flexDirection: "column",
+        gap: "12px",
+    },
+    msgBubble: {
+        padding: "12px 16px",
+        borderRadius: "12px",
+        maxWidth: "80%",
+        fontSize: "0.95rem",
+        lineHeight: "1.5",
+    },
+    userBubble: {
+        alignSelf: "flex-end",
+        background: "linear-gradient(135deg, #667eea, #764ba2)",
+        color: "white",
+    },
+    aiBubble: {
+        alignSelf: "flex-start",
+        background: "white",
+        boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
+        color: "#1f2937",
+    },
+    msgRole: {
+        fontSize: "0.75rem",
+        fontWeight: "700",
+        marginBottom: "4px",
+        opacity: 0.8,
+    },
+    chatInputRow: {
+        padding: "16px 20px",
+        background: "white",
+        borderTop: "1px solid #e5e7eb",
+        display: "flex",
+        gap: "12px",
+    },
+    chatInput: {
+        flex: 1,
+        padding: "12px 16px",
+        border: "1px solid #e5e7eb",
+        borderRadius: "8px",
+        outline: "none",
+    },
+    chatSendBtn: {
+        background: "linear-gradient(135deg, #667eea, #764ba2)",
+        color: "white",
+        border: "none",
+        width: "44px",
+        borderRadius: "8px",
+        cursor: "pointer",
+        fontWeight: "700",
     },
 };

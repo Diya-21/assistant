@@ -1,19 +1,34 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { useAppContext } from "../context/AppContext";
 
-const API_BASE = "http://localhost:8000";
+const API_BASE = "http://127.0.0.1:8080";
 
 export default function LabAgent() {
-  const [experiment, setExperiment] = useState("");
+  const { savePageState, getPageState } = useAppContext();
+  const cached = getPageState("lab");
+
+  const [experiment, setExperiment] = useState(cached?.experiment || "");
   const [inputMode, setInputMode] = useState("text");
   const [uploadedFile, setUploadedFile] = useState(null);
-  const [stage, setStage] = useState("idle");
+  const [stage, setStage] = useState(cached?.stage || "idle");
   const [loading, setLoading] = useState(false);
-  const [content, setContent] = useState("");
+  const [content, setContent] = useState(cached?.content || "");
   const [error, setError] = useState("");
-  const [history, setHistory] = useState([]);
+  const [history, setHistory] = useState(cached?.history || []);
+  const [labChat, setLabChat] = useState(cached?.labChat || {});
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
 
   const fileInputRef = useRef(null);
+
+  // Persist page state on changes
+  useEffect(() => {
+    if (experiment || content) {
+      savePageState("lab", { experiment, stage, content, history, labChat });
+    }
+  }, [experiment, stage, content, history, labChat]);
 
   const callLabAgent = async (step) => {
     setLoading(true);
@@ -69,12 +84,52 @@ export default function LabAgent() {
     setHistory([]);
     setError("");
     setUploadedFile(null);
+    savePageState("lab", null);
+  };
+
+
+  const handleLabChat = async () => {
+    if (!chatInput.trim() || !experiment) return;
+
+    const userMsg = { role: "user", content: chatInput, timestamp: new Date().toISOString() };
+    const currentMsgs = labChat[experiment] || [];
+    const newMsgs = [...currentMsgs, userMsg];
+
+    setLabChat(prev => ({ ...prev, [experiment]: newMsgs }));
+    setChatInput("");
+    setChatLoading(true);
+
+    try {
+      const contextStr = newMsgs.map(m => `${m.role === "user" ? "Student" : "Instructor"}: ${m.content}`).join("\n");
+
+      const formData = new FormData();
+      formData.append("topic", experiment);
+      formData.append("question", userMsg.content);
+      formData.append("context", contextStr);
+      formData.append("mode", "chat");
+      formData.append("user_id", localStorage.getItem("user_id") || "default");
+
+      const res = await fetch(`${API_BASE}/follow-up/`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      const aiMsg = { role: "assistant", content: data.content, timestamp: new Date().toISOString() };
+      setLabChat(prev => ({ ...prev, [experiment]: [...newMsgs, aiMsg] }));
+    } catch (err) {
+      setError("Failed to get chat response.");
+    } finally {
+      setChatLoading(false);
+    }
   };
 
   const stages = [
     { id: "explanation", icon: "📘", label: "What & Why", description: "Understanding the concept" },
     { id: "pseudocode", icon: "🧠", label: "Algorithm", description: "Pseudocode & logic" },
     { id: "viva", icon: "🎤", label: "Viva Prep", description: "Q&A preparation" },
+    { id: "summary", icon: "📝", label: "Summary", description: "Quick revision" },
+    { id: "chat", icon: "💬", label: "Discussion", description: "Clear your doubts" },
   ];
 
   return (
@@ -272,12 +327,56 @@ export default function LabAgent() {
                 </div>
               </div>
 
-              {/* Content Box */}
-              <div style={styles.contentBox}>
-                <div style={styles.markdownContent}>
-                  <ReactMarkdown>{content}</ReactMarkdown>
+              {/* Content Box or Chat Box */}
+              {stage === "chat" ? (
+                <div style={styles.chatContainer}>
+                  <div style={styles.chatMessages}>
+                    {(labChat[experiment] || []).length === 0 && (
+                      <div style={styles.aiBubble}>
+                        👋 Hello! I'm your lab instructor. Do you have any doubts about the experiment <strong>{experiment}</strong>? I can explain the theory, logic, or help you with viva preparation. What's on your mind?
+                      </div>
+                    )}
+                    {(labChat[experiment] || []).map((msg, idx) => (
+                      <div key={idx} style={{ ...styles.msgBubble, ...(msg.role === "user" ? styles.userBubble : styles.aiBubble) }}>
+                        <div style={styles.msgRole}>{msg.role === "user" ? "👤 Student" : "👨‍🏫 Instructor"}</div>
+                        <div className="msg-content">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                        </div>
+                      </div>
+                    ))}
+                    {chatLoading && (
+                      <div style={styles.aiBubble}>
+                        <div style={styles.typingDots}>
+                          <span>•</span><span>•</span><span>•</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div style={styles.chatInputArea}>
+                    <input
+                      type="text"
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      placeholder="Ask a question about this lab..."
+                      style={styles.chatInput}
+                      onKeyPress={(e) => e.key === "Enter" && handleLabChat()}
+                    />
+                    <button
+                      onClick={handleLabChat}
+                      disabled={chatLoading || !chatInput.trim()}
+                      style={styles.sendBtn}
+                    >
+                      {chatLoading ? "..." : "➔"}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div style={styles.contentBox}>
+                  <div className="msg-content" style={styles.markdownContent}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+                  </div>
+                </div>
+              )}
 
               {/* Navigation */}
               <div style={styles.navButtons}>
@@ -318,12 +417,44 @@ export default function LabAgent() {
                       ← Back
                     </button>
                     <button
+                      onClick={() => callLabAgent("summary")}
+                      disabled={loading}
+                      style={styles.nextBtn}
+                    >
+                      <span>Continue to Summary</span>
+                      <span>→</span>
+                    </button>
+                  </>
+                )}
+                {stage === "summary" && (
+                  <>
+                    <button
+                      onClick={() => setStage("viva")}
+                      style={styles.backBtn}
+                    >
+                      ← Back
+                    </button>
+                    <button
+                      onClick={() => setStage("chat")}
+                      style={styles.nextBtn}
+                    >
+                      <span>💬 Start Discussion</span>
+                    </button>
+                    <button
                       onClick={resetLab}
                       style={styles.completeBtn}
                     >
                       ✓ Complete Lab
                     </button>
                   </>
+                )}
+                {stage === "chat" && (
+                  <button
+                    onClick={() => setStage("summary")}
+                    style={styles.backBtn}
+                  >
+                    ← Back
+                  </button>
                 )}
               </div>
             </div>
@@ -676,5 +807,82 @@ const styles = {
     cursor: "pointer",
     fontWeight: "600",
     fontSize: "1rem",
+  },
+  /* Chat Styles */
+  chatContainer: {
+    display: "flex",
+    flexDirection: "column",
+    height: "550px",
+    background: "#f8fafc",
+  },
+  chatMessages: {
+    flex: 1,
+    overflowY: "auto",
+    padding: "24px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "16px",
+  },
+  msgBubble: {
+    maxWidth: "80%",
+    padding: "12px 18px",
+    borderRadius: "18px",
+    fontSize: "0.95rem",
+    lineHeight: "1.5",
+    position: "relative",
+  },
+  userBubble: {
+    alignSelf: "flex-end",
+    background: "linear-gradient(135deg, #10b981, #059669)",
+    color: "white",
+    borderBottomRightRadius: "4px",
+  },
+  aiBubble: {
+    alignSelf: "flex-start",
+    background: "white",
+    color: "#1f2937",
+    borderBottomLeftRadius: "4px",
+    boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
+    border: "1px solid #e5e7eb",
+  },
+  msgRole: {
+    fontSize: "0.75rem",
+    fontWeight: "700",
+    marginBottom: "4px",
+    opacity: 0.8,
+  },
+  chatInputArea: {
+    padding: "20px 24px",
+    background: "white",
+    borderTop: "1px solid #e5e7eb",
+    display: "flex",
+    gap: "12px",
+  },
+  chatInput: {
+    flex: 1,
+    padding: "12px 18px",
+    borderRadius: "12px",
+    border: "1px solid #e5e7eb",
+    outline: "none",
+    fontSize: "0.95rem",
+  },
+  sendBtn: {
+    width: "44px",
+    height: "44px",
+    borderRadius: "12px",
+    background: "#10b981",
+    color: "white",
+    border: "none",
+    fontSize: "1.2rem",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: "pointer",
+    transition: "background 0.2s",
+  },
+  typingDots: {
+    display: "flex",
+    gap: "4px",
+    padding: "4px 0",
   },
 };

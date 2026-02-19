@@ -2,38 +2,6 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import traceback
-
-
-# ---------- RAG ----------
-from backend.rag.syllabus_uploader import extract_text_from_pdf
-from backend.rag.chunker import chunk_text
-from backend.rag.vector_store import get_vector_store
-from backend.rag.retriever import get_retriever
-
-# ---------- AGENTS ----------
-from backend.agents.learning_agent import learning_flow
-from backend.agents.lab_agent import generate_lab_explanation
-
-# ---------- NEW AGENTS: Project & Research Assistant ----------
-from backend.agents.project_agent import generate_project_ideas, get_project_info
-from backend.agents.research_agent import research, search_papers
-from backend.agents.tech_stack_agent import (
-    recommend_tech_stack,
-    compare_tech,
-    explain_tech,
-    get_code_help
-)
-
-
-
-from backend.agents.progress_agent import (
-    track_activity,
-    get_user_progress,
-    get_recommendations,
-    get_analytics
-)
-from backend.agents.performance_analyzer import get_performance_analysis
-from backend.agents.agentic_rag import agentic_answer
 from typing import Optional
 
 app = FastAPI(title="Multimodal AI Teaching Assistant")
@@ -83,112 +51,85 @@ def health_check():
 
 # ---------- UPLOAD SYLLABUS ----------
 @app.post("/upload-syllabus/")
-async def upload_syllabus(file: UploadFile = File(...)):
+def upload_syllabus(file: UploadFile = File(...)):
     try:
-        print(f"📄 Uploading: {file.filename}")
+        from backend.rag.syllabus_uploader import extract_text_from_pdf
+        from backend.rag.chunker import chunk_text
+        from backend.rag.vector_store import get_vector_store
+
+        print(f"🚀 START: Uploading '{file.filename}'")
         
+        print("🔍 Step 1: Extracting text from PDF...")
         text = extract_text_from_pdf(file)
+        print(f"✅ Text extracted ({len(text)} characters)")
 
         if not text.strip():
-            return {
-                "error": "No extractable text found in PDF",
-                "message": "Please ensure the PDF contains text (not just images)"
-            }
+            print("⚠️ No text found in PDF")
+            return {"error": "No extractable text found in PDF", "message": "Please ensure the PDF contains text"}
 
+        print("✂️ Step 2: Chunking text...")
         chunks = chunk_text(text)
+        print(f"✅ Chunked into {len(chunks)} fragments")
+
+        print("🏗️ Step 3: Generating embeddings and indexing (this may take 10-30s)...")
         get_vector_store(chunks)
+        print("✅ Indexing complete!")
 
-        print(f"✅ Syllabus indexed: {len(chunks)} chunks")
-
-        return {
-            "message": "Syllabus indexed successfully",
-            "chunks": len(chunks),
-            "filename": file.filename
-        }
-    
+        return {"status": "success", "message": f"Syllabus '{file.filename}' uploaded and indexed."}
     except Exception as e:
         print(f"❌ Upload error: {e}")
-        return {
-            "error": str(e),
-            "message": "Failed to process PDF"
-        }
+        traceback.print_exc()
+        return {"error": str(e)}
 
 # ---------- LEARNING AGENT ----------
 @app.post("/learn/")
-async def learn(
+def learn(
     topic: str = Form(...), 
     stage: str = Form("explain"),
     user_id: str = Form("default_user")
 ):
     try:
+        from backend.rag.retriever import get_retriever
+        from backend.agents.learning_agent import learning_flow
+        from backend.agents.progress_agent import track_activity
+
         print(f"📚 Learning request: topic={topic}, stage={stage}, user={user_id}")
-        
-        # Try to get syllabus context, but work without it if not available
         context = ""
         try:
             retriever = get_retriever()
             docs = retriever.invoke(topic)
             if docs:
                 context = "\n\n".join(d.page_content for d in docs)
-                print(f"✅ Syllabus context retrieved: {len(context)} chars")
         except Exception as e:
             print(f"⚠️ Retriever not available: {e}")
         
-        # If no syllabus context, use general knowledge prompt
         if not context:
-            context = f"Topic: {topic}. Provide comprehensive educational content based on general knowledge about this topic in AI, Data Science, Machine Learning, or Big Data."
-            print("📝 Using general knowledge (no syllabus)")
-        
-        # Generate response
+            context = f"Topic: {topic}. Use general knowledge about AI/Data Science."
+
         result = learning_flow(context, topic, stage)
-        print(f"✅ Learning flow completed: stage={result.get('stage')}")
-        
-        # Track progress
         try:
             track_activity(user_id, topic, stage)
-            print(f"📊 Progress tracked for {user_id}")
-        except Exception as e:
-            print(f"⚠️ Progress tracking failed: {e}")
-        
+        except: pass
         return result
-    
     except Exception as e:
         print(f"❌ Learning error: {e}")
-        print(traceback.format_exc())
-        
-        return {
-            "stage": "ERROR",
-            "content": f"⚠️ Error processing request: {str(e)}"
-        }
+        return {"stage": "ERROR", "content": str(e)}
 
-# ---------- AGENTIC RAG (Deep Research) ----------
+# ---------- AGENTIC RAG ----------
 @app.post("/deep-research/")
-async def deep_research(
+def deep_research(
     question: str = Form(...),
     user_id: str = Form("default_user")
 ):
-    """
-    Agentic RAG endpoint for complex questions.
-    Uses multi-step reasoning with:
-    - Query planning (breaks question into sub-queries)
-    - Multi-query retrieval (searches multiple times)
-    - Self-evaluation (checks answer quality)
-    - Iterative refinement (improves if needed)
-    """
     try:
-        print(f"🧠 Agentic RAG request: question={question}, user={user_id}")
-        
-        result = agentic_answer(question, use_planning=True)
-        
-        print(f"✅ Agentic RAG completed: iterations={result.get('iterations')}, sources={result.get('sources_used')}")
-        
-        # Track progress
+        from backend.agents.agentic_rag import agentic_answer
+        from backend.agents.progress_agent import track_activity
+
+        print(f"🧠 Agentic RAG request: {question}")
+        result = agentic_answer(question)
         try:
             track_activity(user_id, question, "deep_research")
-            print(f"📊 Deep research tracked for {user_id}")
-        except Exception as e:
-            print(f"⚠️ Progress tracking failed: {e}")
-        
+        except: pass
         return {
             "stage": "DEEP_RESEARCH",
             "content": result.get("answer", ""),
@@ -197,204 +138,101 @@ async def deep_research(
             "iterations": result.get("iterations", 1),
             "sources_used": result.get("sources_used", 0)
         }
-    
     except Exception as e:
         print(f"❌ Agentic RAG error: {e}")
-        print(traceback.format_exc())
-        return {
-            "stage": "ERROR",
-            "content": f"⚠️ Error: {str(e)}",
-            "reasoning_trace": []
-        }
+        return {"stage": "ERROR", "content": str(e)}
 
 # ---------- FOLLOW-UP CHAT ----------
 @app.post("/follow-up/")
-async def follow_up_chat(
+def follow_up_chat(
     topic: str = Form(...),
     question: str = Form(...),
     context: str = Form(""),
     mode: str = Form("chat"),
     user_id: str = Form("default_user")
 ):
-    """
-    Follow-up chat endpoint with multiple modes:
-    - chat: Normal follow-up question
-    - summary: Generate a concise summary
-    - diagram: Generate ASCII/text diagrams
-    - agentic: Use Agentic RAG for deep research
-    - videos: Provide YouTube video references
-    - quiz: Generate a testing quiz
-    """
     try:
-        print(f"💬 Follow-up [{mode}]: topic={topic}, question={question[:50]}...")
-        
-        # Build context from syllabus if available
+        from backend.rag.retriever import get_retriever
+        from backend.agents.qa_agent import generate_answer
+        from backend.agents.learning_agent import learning_flow
+        from backend.agents.agentic_rag import agentic_answer
+        from backend.agents.progress_agent import track_activity
+
+        print(f"💬 Follow-up [{mode}]: topic={topic}")
         syllabus_context = ""
         try:
             retriever = get_retriever()
-            if retriever:
-                docs = retriever.invoke(f"{topic} {question}")
-                if docs:
-                    syllabus_context = "\n\n".join(d.page_content for d in docs[:3])
-        except Exception as e:
-            print(f"⚠️ Retriever not available: {e}")
-
-        # Combined context for agents
-        combined_context = f"Topic Context: {topic}\n\nSyllabus Info:\n{syllabus_context}\n\nPrevious Conversation:\n{context}"
-
-        # 1. Videos Mode
-        if mode == "videos":
-            search_query = f"{topic} tutorial explanation".replace(" ", "+")
-            content = f"""### 🎥 Recommended YouTube Resources for **{topic}**
-
-I've found some useful search paths for you to explore this topic visually:
-
-1. **Comprehensive Tutorial**: [Watch on YouTube](https://www.youtube.com/results?search_query={search_query})
-2. **Crash Course / Fast Explanation**: [Quick Explanation](https://www.youtube.com/results?search_query={topic.replace(" ", "+")}+in+5+minutes)
-3. **Advanced Concepts & Implementation**: [Advanced Deep Dive](https://www.youtube.com/results?search_query={topic.replace(" ", "+")}+advanced+tutorial)
-
-*Check these out to get a visual understanding of the concepts we just discussed!*"""
-            return {"stage": "VIDEOS", "content": content}
-
-        # 2. Quiz Mode
-        if mode == "quiz":
-            from backend.agents.learning_agent import learning_flow
-            return learning_flow(combined_context, topic, "quiz")
-
-        # 3. Agentic Mode
-        if mode == "agentic":
-            result = agentic_answer(question, use_planning=True)
-            try:
-                track_activity(user_id, f"Agentic: {question}", "deep_research")
-            except:
-                pass
-            return {
-                "stage": "DEEP_RESEARCH",
-                "content": result.get("answer", ""),
-                "reasoning_trace": result.get("reasoning_trace", []),
-                "sub_queries": result.get("sub_queries", []),
-                "iterations": result.get("iterations", 1),
-                "sources_used": result.get("sources_used", 0)
-            }
-        
-        # 4. Standard Prompts (Summary, Diagram, Chat)
-        if mode == "summary":
-            full_prompt = f"Summarize {topic} concisely with key points and recap."
-            question_text = f"Summarize {topic}"
-        elif mode == "diagram":
-            full_prompt = "Create ASCII/text diagrams (architecture, table, tree) for " + topic
-            question_text = f"Create diagrams for {topic}"
-        else:
-            full_prompt = f"Answer follow-up: {question}"
-            question_text = question
-
-        from backend.agents.qa_agent import generate_answer
-        answer = generate_answer(
-            context=combined_context, 
-            question=full_prompt
-        )
-        
-        # Track activity
-        try:
-            track_activity(user_id, f"{mode}: {topic}", mode)
+            docs = retriever.invoke(f"{topic} {question}")
+            if docs:
+                syllabus_context = "\n\n".join(d.page_content for d in docs[:3])
         except: pass
+
+        combined_context = f"Topic: {topic}\n\nSyllabus:\n{syllabus_context}\n\nChat:\n{context}"
+
+        if mode == "videos":
+            search_query = topic.replace(" ", "+")
+            content = f"### 🎥 Recommended YouTube Resources for **{topic}**\n\n1. [Tutorial](https://www.youtube.com/results?search_query={search_query})\n2. [Crash Course](https://www.youtube.com/results?search_query={search_query}+explained)"
+            return {"stage": "VIDEOS", "content": content}
         
-        return {
-            "stage": mode.upper(),
-            "content": answer
-        }
-    
+        if mode == "quiz":
+            return learning_flow(combined_context, topic, "quiz")
+        
+        if mode == "agentic":
+            return agentic_answer(question)
+
+        prompt = f"User asks about {topic}: {question}\n\nContext:\n{combined_context}"
+        answer = generate_answer(combined_context, prompt)
+        return {"stage": mode.upper(), "content": answer}
     except Exception as e:
-        print(f"❌ Follow-up error: {e}")
-        print(traceback.format_exc())
-        return {
-            "stage": "ERROR",
-            "content": f"⚠️ Error: {str(e)}"
-        }
+        return {"stage": "ERROR", "content": str(e)}
 
 # ---------- LAB AGENT ----------
 @app.post("/lab/")
-async def lab_agent(
+def lab_agent(
     experiment: str = Form(...),
     step: str = Form("explanation"),
     user_id: str = Form("default_user"),
 ):
     try:
-        print(f"🔬 Lab request: experiment={experiment}, step={step}, user={user_id}")
-        
-        # Try to get syllabus context, but work without it if not available
+        from backend.agents.lab_agent import generate_lab_explanation
+        from backend.rag.retriever import get_retriever
+        from backend.agents.progress_agent import track_activity
+
+        print(f"🔬 Lab request: {experiment}")
         context = ""
         try:
             retriever = get_retriever()
             docs = retriever.invoke(experiment)
             if docs:
                 context = "\n\n".join(d.page_content for d in docs)
-                print(f"✅ Syllabus context retrieved: {len(context)} chars")
-        except Exception as e:
-            print(f"⚠️ Retriever not available: {e}")
-        
-        # If no syllabus context, use general knowledge prompt
-        if not context:
-            context = f"Experiment: {experiment}. Provide a comprehensive explanation based on general knowledge about this topic in AI/Data Science/Big Data."
-            print("📝 Using general knowledge (no syllabus)")
+        except: pass
 
-        result = generate_lab_explanation(
-            context=context,
-            experiment_title=experiment,
-            step=step,
-        )
-        
-        print(f"✅ Lab flow completed: stage={result.get('stage')}")
-        
-        # Track progress
+        if not context:
+            context = f"Experiment: {experiment}. Provide comprehensive explanation."
+
+        result = generate_lab_explanation(context, experiment, step)
         try:
             track_activity(user_id, experiment, "lab")
-            print(f"📊 Lab progress tracked for {user_id}")
-        except Exception as e:
-            print(f"⚠️ Progress tracking failed: {e}")
-        
+        except: pass
         return result
-    
     except Exception as e:
-        print(f"❌ Lab error: {e}")
-        import traceback
-        print(traceback.format_exc())
-        return {
-            "stage": "ERROR",
-            "content": f"⚠️ Error: {str(e)}"
-        }
+        return {"stage": "ERROR", "content": str(e)}
 
-# ---------- QA ENDPOINT (OPTIONAL) ----------
+# ---------- QA ENDPOINT ----------
 @app.post("/ask/")
-async def ask_question(question: str = Form(...)):
+def ask_question(question: str = Form(...)):
     try:
-        print(f"❓ Question: {question}")
-        
         from backend.agents.qa_agent import generate_answer
-        
+        from backend.rag.retriever import get_retriever
         retriever = get_retriever()
         docs = retriever.invoke(question)
-
-        if not docs:
-            return {
-                "answer": "⚠️ No relevant information found in syllabus for this question."
-            }
-
-        context = "\n\n".join(d.page_content for d in docs)
+        context = "\n\n".join(d.page_content for d in docs) if docs else "General knowledge."
         answer = generate_answer(context, question)
-        
         return {"answer": answer}
-    
     except Exception as e:
-        print(f"❌ QA error: {e}")
-        return {
-            "answer": f"⚠️ Error: {str(e)}"
-        }
-        
-        
-        
-        
-        # ---------- PROGRESS TRACKING ----------
+        return {"answer": f"Error: {str(e)}"}
+
+# ---------- PROGRESS TRACKING ----------
 @app.post("/track-progress/")
 async def track_progress(
     user_id: str = Form(...),
@@ -403,253 +241,96 @@ async def track_progress(
     score: Optional[int] = Form(None),
     total: Optional[int] = Form(None)
 ):
-    """Track user learning activity"""
-    return track_activity(
-        user_id=user_id,
-        topic=topic,
-        activity_type=activity_type,
-        score=score,
-        total=total
-    )
+    from backend.agents.progress_agent import track_activity
+    return track_activity(user_id, topic, activity_type, score, total)
 
 @app.get("/progress/{user_id}")
 async def get_progress(user_id: str):
-    """Get user's complete progress"""
+    from backend.agents.progress_agent import get_user_progress
     return get_user_progress(user_id)
 
 @app.get("/recommendations/{user_id}")
 async def get_user_recommendations(user_id: str):
-    """Get personalized study recommendations"""
-    recs = get_recommendations(user_id)
-    return {"recommendations": recs}
+    from backend.agents.progress_agent import get_recommendations
+    return {"recommendations": get_recommendations(user_id)}
 
 @app.get("/analytics/{user_id}")
 async def get_user_analytics(user_id: str):
-    """Get analytics for charts and visualization"""
+    from backend.agents.progress_agent import get_analytics
     return get_analytics(user_id)
 
-# ============================================================
-# PROJECT ASSISTANT ENDPOINTS
-# ============================================================
-
+# ---------- PROJECTS ----------
 @app.post("/project-ideas/")
-async def project_ideas(
-    subjects: str = Form(..., description="Comma-separated subjects, e.g., 'Machine Learning, Data Structures'")
-):
-    """Generate project ideas based on subjects from syllabus"""
+def project_ideas(subjects: str = Form(...)):
     try:
-        print(f"💡 Project ideas request: subjects={subjects}")
-        result = generate_project_ideas(subjects)
-        print(f"✅ Generated {len(result.get('projects', []))} project ideas")
-        return result
+        from backend.agents.project_agent import generate_project_ideas
+        return generate_project_ideas(subjects)
     except Exception as e:
-        print(f"❌ Project ideas error: {e}")
-        return {
-            "stage": "ERROR",
-            "content": f"⚠️ Error: {str(e)}"
-        }
+        return {"stage": "ERROR", "content": str(e)}
 
 @app.post("/project-detail/")
-async def project_detail(
-    project_title: str = Form(..., description="Title of the project"),
-    stage: str = Form("detailed", description="Stage: detailed, roadmap, or concepts")
-):
-    """Get detailed information about a specific project"""
+def project_detail(project_title: str = Form(...), stage: str = Form("detailed")):
     try:
-        print(f"📋 Project detail request: {project_title}, stage={stage}")
-        result = get_project_info(project_title, stage)
-        return result
+        from backend.agents.project_agent import get_project_info
+        return get_project_info(project_title, stage)
     except Exception as e:
-        print(f"❌ Project detail error: {e}")
-        return {
-            "stage": "ERROR",
-            "content": f"⚠️ Error: {str(e)}"
-        }
+        return {"stage": "ERROR", "content": str(e)}
 
-# ============================================================
-# RESEARCH ASSISTANT ENDPOINTS
-# ============================================================
-
+# ---------- RESEARCH ----------
 @app.post("/research/")
-async def research_topic(
-    topic: str = Form(..., description="Topic to research"),
-    include_papers: bool = Form(True, description="Whether to fetch external papers")
-):
-    """Research a topic with syllabus context and external papers"""
+def research_topic(topic: str = Form(...), include_papers: bool = Form(True)):
     try:
-        print(f"🔬 Research request: {topic}")
-        result = research(topic, include_papers)
-        print(f"✅ Research complete: {len(result.get('papers', []))} papers found")
-        return result
+        from backend.agents.research_agent import research
+        return research(topic, include_papers)
     except Exception as e:
-        print(f"❌ Research error: {e}")
-        return {
-            "stage": "ERROR",
-            "content": f"⚠️ Error: {str(e)}"
-        }
+        return {"stage": "ERROR", "content": str(e)}
 
 @app.post("/search-papers/")
-async def search_research_papers(
-    query: str = Form(..., description="Search query for papers")
-):
-    """Search for academic papers from arXiv and Semantic Scholar"""
+def search_research_papers(query: str = Form(...)):
     try:
-        print(f"📄 Paper search: {query}")
-        result = search_papers(query)
-        print(f"✅ Found {len(result.get('papers', []))} papers")
-        return result
+        from backend.agents.research_agent import search_papers
+        return search_papers(query)
     except Exception as e:
-        print(f"❌ Paper search error: {e}")
-        return {
-            "stage": "ERROR",
-            "content": f"⚠️ Error: {str(e)}"
-        }
+        return {"stage": "ERROR", "content": str(e)}
 
-# ============================================================
-# TECH STACK ASSISTANT ENDPOINTS
-# ============================================================
-
+# ---------- TECH STACK ----------
 @app.post("/tech-stack/")
-async def tech_stack_recommendation(
-    project_type: str = Form(..., description="Type of project, e.g., 'web_app', 'ml_project'"),
-    requirements: str = Form("", description="Specific requirements or constraints")
-):
-    """Get tech stack recommendations for a project type"""
+def tech_stack_recommendation(project_type: str = Form(...), requirements: str = Form("")):
     try:
-        print(f"🛠️ Tech stack request: {project_type}")
-        result = recommend_tech_stack(project_type, requirements)
-        return result
+        from backend.agents.tech_stack_agent import recommend_tech_stack
+        return recommend_tech_stack(project_type, requirements)
     except Exception as e:
-        print(f"❌ Tech stack error: {e}")
-        return {
-            "stage": "ERROR",
-            "content": f"⚠️ Error: {str(e)}"
-        }
+        return {"stage": "ERROR", "content": str(e)}
 
 @app.post("/compare-tech/")
-async def compare_technologies(
-    tech1: str = Form(..., description="First technology"),
-    tech2: str = Form(..., description="Second technology"),
-    context: str = Form("", description="Use case context")
-):
-    """Compare two technologies with pros and cons"""
+def compare_technologies(tech1: str = Form(...), tech2: str = Form(...), context: str = Form("")):
     try:
-        print(f"⚖️ Compare: {tech1} vs {tech2}")
-        result = compare_tech(tech1, tech2, context)
-        return result
+        from backend.agents.tech_stack_agent import compare_tech
+        return compare_tech(tech1, tech2, context)
     except Exception as e:
-        print(f"❌ Compare error: {e}")
-        return {
-            "stage": "ERROR",
-            "content": f"⚠️ Error: {str(e)}"
-        }
+        return {"stage": "ERROR", "content": str(e)}
 
 @app.post("/explain-tech/")
-async def explain_technology(
-    concept: str = Form(..., description="Technical concept to explain"),
-    depth: str = Form("intermediate", description="Depth: beginner, intermediate, advanced")
-):
-    """Explain a technical concept in depth"""
+def explain_technology(concept: str = Form(...), depth: str = Form("intermediate")):
     try:
-        print(f"📖 Explain: {concept} ({depth})")
-        result = explain_tech(concept, depth)
-        return result
+        from backend.agents.tech_stack_agent import explain_tech
+        return explain_tech(concept, depth)
     except Exception as e:
-        print(f"❌ Explain error: {e}")
-        return {
-            "stage": "ERROR",
-            "content": f"⚠️ Error: {str(e)}"
-        }
+        return {"stage": "ERROR", "content": str(e)}
 
 @app.post("/code-help/")
-async def code_help(
-    task: str = Form(..., description="What you're trying to do"),
-    technology: str = Form(..., description="Technology being used")
-):
-    """Get code guidance and patterns (not full implementation)"""
+def code_help(task: str = Form(...), technology: str = Form(...)):
     try:
-        print(f"💻 Code help: {task} with {technology}")
-        result = get_code_help(task, technology)
-        return result
+        from backend.agents.tech_stack_agent import get_code_help
+        return get_code_help(task, technology)
     except Exception as e:
-        print(f"❌ Code help error: {e}")
-        return {
-            "stage": "ERROR",
-            "content": f"⚠️ Error: {str(e)}"
-        }
-
-
-# ============================================================
-# PROGRESS & PERFORMANCE TRACKING
-# ============================================================
-
-@app.get("/progress/{user_id}")
-async def get_progress(user_id: str):
-    """Get user's learning progress"""
-    try:
-        progress = get_user_progress(user_id)
-        return progress
-    except Exception as e:
-        print(f"❌ Progress error: {e}")
-        return {"error": str(e)}
-
-@app.get("/recommendations/{user_id}")
-async def recommendations(user_id: str):
-    """Get personalized learning recommendations"""
-    try:
-        recs = get_recommendations(user_id)
-        return recs
-    except Exception as e:
-        print(f"❌ Recommendations error: {e}")
-        return {"recommendations": []}
-
-@app.get("/analytics/{user_id}")
-async def analytics(user_id: str):
-    """Get learning analytics"""
-    try:
-        data = get_analytics(user_id)
-        return data
-    except Exception as e:
-        print(f"❌ Analytics error: {e}")
-        return {"error": str(e)}
+        return {"stage": "ERROR", "content": str(e)}
 
 @app.get("/performance/{user_id}")
 async def performance_analysis(user_id: str):
-    """
-    Get ML-based performance analysis including:
-    - Strong/weak topic identification
-    - Exam performance prediction
-    - Personalized focus areas
-    - Learning style analysis
-    """
-    try:
-        print(f"📊 Performance analysis for: {user_id}")
-        analysis = get_performance_analysis(user_id)
-        return analysis
-    except Exception as e:
-        print(f"❌ Performance analysis error: {e}")
-        import traceback
-        print(traceback.format_exc())
-        return {
-            "status": "error",
-            "message": f"Error analyzing performance: {str(e)}"
-        }
+    from backend.agents.performance_analyzer import get_performance_analysis
+    return get_performance_analysis(user_id)
 
-
-# ---------- STARTUP EVENT ----------
 @app.on_event("startup")
 async def startup_event():
-    print("\n" + "="*50)
-    print("🎓 Multimodal AI Teaching Assistant")
-    print("   AI & Data Science Department")
-    print("="*50)
-    print("📚 Features: Theory, Lab, Projects, Research, Tech Stack")
-    print("✅ Server started")
-    print("📍 Running on: http://127.0.0.1:8000")
-    print("📖 API Docs: http://127.0.0.1:8000/docs")
-    print("="*50 + "\n")
-
-# ---------- SHUTDOWN EVENT ----------
-@app.on_event("shutdown")
-async def shutdown_event():
-    print("\n👋 Server shutting down...")
+    print("🎓 Backend Started Successfully")
