@@ -151,18 +151,25 @@ export default function ProjectAssistant() {
             {error && <div style={styles.error}>{error}</div>}
 
 
-            {/* Projects Grid */}
-            {projects.length > 0 && (
+            {/* Projects Grid with Selection Prompt */}
+            {projects.length > 0 && !selectedProject && (
                 <div style={styles.projectsSection}>
-                    <h2 style={styles.sectionTitle}>📋 Project Ideas</h2>
+                    <div style={styles.selectionPrompt}>
+                        <div style={styles.selectionIcon}>🎯</div>
+                        <h2 style={styles.sectionTitle}>Choose a Project to Continue With</h2>
+                        <p style={{ color: "#64748b", margin: "0", fontSize: "1rem" }}>
+                            We found {projects.length} project ideas based on your subjects. Select one to get a detailed breakdown, roadmap, and technical concepts.
+                        </p>
+                    </div>
                     <div style={styles.projectsGrid}>
                         {projects.map((project, index) => (
                             <div
                                 key={index}
-                                className={`project-card ${selectedProject?.title === project.title ? "selected" : ""}`}
-                                onClick={() => handleSelectProject(project)}
+                                className="project-card"
+                                style={{ position: "relative" }}
                             >
                                 <div style={styles.cardHeader}>
+                                    <span style={styles.projectNumber}>#{index + 1}</span>
                                     <span style={{
                                         ...styles.difficultyTag,
                                         background: getDifficultyColor(project.difficulty)
@@ -182,9 +189,39 @@ export default function ProjectAssistant() {
                                         💡 {project.innovation || project.innovation_factor}
                                     </div>
                                 )}
+                                <button
+                                    onClick={() => handleSelectProject(project)}
+                                    style={styles.continueBtn}
+                                    onMouseEnter={(e) => {
+                                        e.target.style.transform = "translateY(-2px)";
+                                        e.target.style.boxShadow = "0 6px 20px rgba(102, 126, 234, 0.4)";
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.target.style.transform = "translateY(0)";
+                                        e.target.style.boxShadow = "0 4px 12px rgba(102, 126, 234, 0.25)";
+                                    }}
+                                >
+                                    Continue with this →
+                                </button>
                             </div>
                         ))}
                     </div>
+                </div>
+            )}
+
+            {/* Selected Project Indicator (when viewing details) */}
+            {projects.length > 0 && selectedProject && (
+                <div style={{ marginBottom: "16px" }}>
+                    <button
+                        onClick={() => {
+                            setSelectedProject(null);
+                            setProjectDetail(null);
+                            setDetailStage("detailed");
+                        }}
+                        style={styles.backBtn}
+                    >
+                        ← Back to Project Ideas
+                    </button>
                 </div>
             )}
 
@@ -193,20 +230,25 @@ export default function ProjectAssistant() {
                 <div style={styles.detailPanel}>
                     <div style={styles.detailHeader}>
                         <h2 style={styles.detailTitle}>📌 {selectedProject.title}</h2>
+                        <p style={{ color: "rgba(255,255,255,0.8)", margin: "4px 0 16px", fontSize: "0.95rem" }}>
+                            Explore the full details, implementation roadmap, and core concepts below.
+                        </p>
                         <div style={styles.stageTabs}>
-                            {["detailed", "roadmap", "concepts", "chat"].map((stage) => (
+                            {[
+                                { key: "detailed", icon: "📋", label: "Details" },
+                                { key: "roadmap", icon: "🗺️", label: "Roadmap" },
+                                { key: "concepts", icon: "📚", label: "Concepts" },
+                                { key: "chat", icon: "💬", label: "Chat" },
+                            ].map(({ key, icon, label }) => (
                                 <button
-                                    key={stage}
-                                    onClick={() => stage === "chat" ? setDetailStage("chat") : handleChangeStage(stage)}
+                                    key={key}
+                                    onClick={() => key === "chat" ? setDetailStage("chat") : handleChangeStage(key)}
                                     style={{
                                         ...styles.stageTab,
-                                        ...(detailStage === stage ? styles.stageTabActive : {})
+                                        ...(detailStage === key ? styles.stageTabActive : {})
                                     }}
                                 >
-                                    {stage === "detailed" && "📋 Details"}
-                                    {stage === "roadmap" && "🗺️ Roadmap"}
-                                    {stage === "concepts" && "📚 Concepts"}
-                                    {stage === "chat" && "💬 Chat"}
+                                    {icon} {label}
                                 </button>
                             ))}
                         </div>
@@ -266,11 +308,49 @@ function getDifficultyColor(difficulty) {
     }
 }
 
+
 const styles = {
     container: {
         maxWidth: "1200px",
         margin: "0 auto",
         padding: "40px 20px",
+    },
+    selectionPrompt: {
+        textAlign: "center",
+        marginBottom: "30px",
+        padding: "20px",
+        background: "linear-gradient(135deg, #f0f4ff, #e8ecff)",
+        borderRadius: "16px",
+        border: "2px dashed #667eea",
+    },
+    selectionIcon: {
+        fontSize: "2.5rem",
+        marginBottom: "8px",
+    },
+    continueBtn: {
+        width: "100%",
+        marginTop: "16px",
+        padding: "12px 20px",
+        background: "linear-gradient(135deg, #667eea, #764ba2)",
+        color: "white",
+        border: "none",
+        borderRadius: "10px",
+        fontSize: "0.95rem",
+        fontWeight: "600",
+        cursor: "pointer",
+        transition: "all 0.2s ease",
+        boxShadow: "0 4px 12px rgba(102, 126, 234, 0.25)",
+    },
+    backBtn: {
+        padding: "10px 20px",
+        background: "white",
+        color: "#667eea",
+        border: "2px solid #667eea",
+        borderRadius: "10px",
+        fontSize: "0.95rem",
+        fontWeight: "600",
+        cursor: "pointer",
+        transition: "all 0.2s",
     },
     header: {
         textAlign: "center",

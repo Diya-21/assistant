@@ -76,8 +76,8 @@ Output: ["MapReduce architecture and features", "Apache Spark architecture and f
         Falls back to general knowledge if no retriever available.
         """
         if not self.retriever:
-            # No syllabus uploaded - use general knowledge context
-            return f"No syllabus uploaded. Use your general knowledge about AI, Data Science, Machine Learning, and Big Data to answer about: {', '.join(queries)}"
+            # No syllabus uploaded - inform the student
+            return f"No syllabus has been uploaded. The student is asking about: {', '.join(queries)}. Inform them to upload their syllabus PDF first for accurate, course-specific answers."
         
         all_docs = []
         seen_content = set()
@@ -98,7 +98,7 @@ Output: ["MapReduce architecture and features", "Apache Spark architecture and f
                 continue
         
         if not all_docs:
-            return f"No relevant content found in syllabus. Use general knowledge about: {', '.join(queries)}"
+            return f"No relevant content was found in the uploaded syllabus for: {', '.join(queries)}. Inform the student that this topic does not appear to be covered in their uploaded syllabus."
         
         # Combine all unique documents
         combined_context = "\n\n---\n\n".join(

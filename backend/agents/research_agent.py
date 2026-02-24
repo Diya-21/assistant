@@ -4,7 +4,7 @@ Uses Agentic RAG + External APIs (arXiv, Semantic Scholar) for academic research
 """
 
 from backend.rag.retriever import get_retriever
-from backend.agents.qa_agent import generate_answer
+from backend.agents.qa_agent import generate_answer, GENERAL_PROMPT
 from backend.agents.agentic_rag import AgenticRAG
 import requests
 import json
@@ -227,7 +227,8 @@ Use the syllabus context but provide comprehensive coverage.
         
         explanation = generate_answer(
             context=context if context else "General knowledge",
-            question=concept_prompt
+            question=concept_prompt,
+            system_prompt=GENERAL_PROMPT
         )
         
         reasoning_trace.append("✅ Concept explanation generated")
@@ -264,7 +265,8 @@ Keep it practical for undergraduate/graduate level.
         
         directions = generate_answer(
             context=context if context else "General knowledge",
-            question=directions_prompt
+            question=directions_prompt,
+            system_prompt=GENERAL_PROMPT
         )
         
         reasoning_trace.append("✅ Research complete")
@@ -321,7 +323,8 @@ Papers:
         
         summary = generate_answer(
             context=paper_context,
-            question=summary_prompt
+            question=summary_prompt,
+            system_prompt=GENERAL_PROMPT
         )
         
         return {

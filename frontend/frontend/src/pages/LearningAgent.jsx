@@ -1,14 +1,33 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import PageContainer from "../components/PageContainer";
 import { learnTopic } from "../api/backend";
+import { useAppContext } from "../context/AppContext";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 
 export default function LearningAgent() {
-  const [topic, setTopic] = useState("");
-  const [stages, setStages] = useState([]);
-  const [quizAnswers, setQuizAnswers] = useState({});
-  const [score, setScore] = useState(null);
+  const { savePageState, getPageState } = useAppContext();
+  const cached = getPageState("theory");
+
+  const [topic, setTopic] = useState(cached?.topic || "");
+  const [stages, setStages] = useState(cached?.stages || []);
+  const [quizAnswers, setQuizAnswers] = useState(cached?.quizAnswers || {});
+  const [score, setScore] = useState(cached?.score || null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Save state to AppContext whenever it changes
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    savePageState("theory", { topic, stages, quizAnswers, score });
+  }, [topic, stages, quizAnswers, score, savePageState]);
 
   async function handleAsk(stage) {
     if (!topic.trim()) {
@@ -18,11 +37,13 @@ export default function LearningAgent() {
 
     setLoading(true);
     setError("");
-    
+
     try {
       const data = await learnTopic(topic, stage);
-      
-      if (data.content && data.content.includes("⚠️")) {
+
+      if (data.stage === "ERROR") {
+        setError(data.content || "Something went wrong. Please try again.");
+      } else if (data.content && data.content.includes("⚠️")) {
         setError(data.content);
       } else {
         setStages(prev => [...prev, data]);
@@ -58,14 +79,141 @@ export default function LearningAgent() {
     setQuizAnswers({});
     setScore(null);
     setError("");
+    savePageState("theory", null);
   }
 
   const quizStage = stages.find(s => s.stage === "QUIZ");
 
+  /* ── Markdown Styling ── */
+  const markdownContainerStyle = {
+    lineHeight: "1.8",
+    fontSize: "0.95rem",
+    color: "#1f2937",
+    maxHeight: "600px",
+    overflowY: "auto",
+    padding: "0.5rem 0",
+  };
+
+  const markdownComponents = {
+    h1: ({ children }) => (
+      <h1 style={{ fontSize: "1.6rem", fontWeight: "700", color: "#1f2937", borderBottom: "3px solid #667eea", paddingBottom: "8px", marginTop: "1.5rem" }}>{children}</h1>
+    ),
+    h2: ({ children }) => (
+      <h2 style={{ fontSize: "1.35rem", fontWeight: "700", color: "#374151", borderBottom: "2px solid #e5e7eb", paddingBottom: "6px", marginTop: "1.5rem" }}>{children}</h2>
+    ),
+    h3: ({ children }) => (
+      <h3 style={{ fontSize: "1.15rem", fontWeight: "600", color: "#4b5563", marginTop: "1.2rem" }}>{children}</h3>
+    ),
+    p: ({ children }) => (
+      <p style={{ margin: "0.6rem 0", lineHeight: "1.8" }}>{children}</p>
+    ),
+    ul: ({ children }) => (
+      <ul style={{ paddingLeft: "1.5rem", margin: "0.5rem 0" }}>{children}</ul>
+    ),
+    ol: ({ children }) => (
+      <ol style={{ paddingLeft: "1.5rem", margin: "0.5rem 0" }}>{children}</ol>
+    ),
+    li: ({ children }) => (
+      <li style={{ marginBottom: "0.4rem", lineHeight: "1.7" }}>{children}</li>
+    ),
+    strong: ({ children }) => (
+      <strong style={{ color: "#1e3a5f", fontWeight: "700" }}>{children}</strong>
+    ),
+    blockquote: ({ children }) => (
+      <blockquote style={{
+        borderLeft: "4px solid #667eea",
+        padding: "0.75rem 1rem",
+        margin: "1rem 0",
+        background: "#f0f4ff",
+        borderRadius: "0 8px 8px 0",
+        color: "#374151",
+        fontStyle: "italic",
+      }}>{children}</blockquote>
+    ),
+    table: ({ children }) => (
+      <div style={{ overflowX: "auto", margin: "1rem 0", borderRadius: "10px", border: "1px solid #e5e7eb" }}>
+        <table style={{
+          width: "100%",
+          borderCollapse: "collapse",
+          fontSize: "0.9rem",
+        }}>{children}</table>
+      </div>
+    ),
+    thead: ({ children }) => (
+      <thead style={{ background: "linear-gradient(135deg, #667eea, #764ba2)", color: "white" }}>{children}</thead>
+    ),
+    th: ({ children }) => (
+      <th style={{
+        padding: "12px 16px",
+        textAlign: "left",
+        fontWeight: "600",
+        fontSize: "0.85rem",
+        letterSpacing: "0.03em",
+      }}>{children}</th>
+    ),
+    td: ({ children }) => (
+      <td style={{
+        padding: "10px 16px",
+        borderBottom: "1px solid #f3f4f6",
+        color: "#374151",
+      }}>{children}</td>
+    ),
+    tr: ({ children, ...props }) => {
+      const isEven = props.node?.position?.start?.line % 2 === 0;
+      return <tr style={{ background: isEven ? "#f9fafb" : "white" }}>{children}</tr>;
+    },
+    code: ({ inline, className, children }) => {
+      if (inline) {
+        return (
+          <code style={{
+            background: "#eef2ff",
+            color: "#4338ca",
+            padding: "2px 6px",
+            borderRadius: "4px",
+            fontSize: "0.88em",
+            fontFamily: "'Fira Code', 'Consolas', monospace",
+          }}>{children}</code>
+        );
+      }
+      return (
+        <div style={{ margin: "1rem 0", borderRadius: "10px", overflow: "hidden", border: "1px solid #334155" }}>
+          <div style={{
+            background: "#1e293b",
+            padding: "6px 14px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}>
+            <span style={{ color: "#94a3b8", fontSize: "0.75rem", fontWeight: "600" }}>
+              {className?.replace("language-", "").toUpperCase() || "CODE"}
+            </span>
+            <div style={{ display: "flex", gap: "6px" }}>
+              <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#ef4444" }}></span>
+              <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#f59e0b" }}></span>
+              <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#10b981" }}></span>
+            </div>
+          </div>
+          <pre style={{
+            background: "#0f172a",
+            padding: "1rem 1.25rem",
+            margin: 0,
+            overflowX: "auto",
+            color: "#e2e8f0",
+            fontSize: "0.88rem",
+            lineHeight: "1.6",
+            fontFamily: "'Fira Code', 'Consolas', monospace",
+          }}>
+            <code>{children}</code>
+          </pre>
+        </div>
+      );
+    },
+  };
+
   return (
     <PageContainer title="📘 Learning Agent" subtitle="Step-by-step learning from your syllabus">
       <div style={{ maxWidth: "900px", margin: "0 auto" }}>
-        
+
         {/* Error Display */}
         {error && (
           <div style={{
@@ -100,8 +248,8 @@ export default function LearningAgent() {
               onKeyPress={(e) => e.key === "Enter" && !loading && handleAsk("explain")}
               disabled={loading}
             />
-            <button 
-              onClick={() => handleAsk("explain")} 
+            <button
+              onClick={() => handleAsk("explain")}
               disabled={loading || !topic.trim()}
               style={{
                 padding: "0.75rem 2rem",
@@ -128,9 +276,9 @@ export default function LearningAgent() {
             boxShadow: "0 4px 15px rgba(102, 126, 234, 0.3)"
           }}>
             <h2 style={{ margin: 0, color: "white", fontSize: "1.5rem" }}>📖 Learning: {topic}</h2>
-            <button 
-              onClick={resetAgent} 
-              style={{ 
+            <button
+              onClick={resetAgent}
+              style={{
                 padding: "0.5rem 1.25rem",
                 backgroundColor: "rgba(255,255,255,0.2)",
                 color: "white",
@@ -163,20 +311,16 @@ export default function LearningAgent() {
                 {stage.stage === "DEEP" && "🔬 Deep Explanation"}
                 {stage.stage === "REFERENCES" && "📺 Learning Resources"}
               </h3>
-              
-              <pre style={{
-                whiteSpace: "pre-wrap",
-                lineHeight: "1.6",
-                maxHeight: "500px",
-                overflowY: "auto",
-                padding: "1rem",
-                backgroundColor: "#f9f9f9",
-                borderRadius: "6px",
-                fontFamily: "inherit",
-                marginBottom: 0
-              }}>
-                {stage.content}
-              </pre>
+
+              <div style={markdownContainerStyle}>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkMath]}
+                  rehypePlugins={[rehypeKatex]}
+                  components={markdownComponents}
+                >
+                  {stage.content}
+                </ReactMarkdown>
+              </div>
             </div>
           );
         })}
@@ -265,9 +409,9 @@ export default function LearningAgent() {
               const showResult = score !== null;
               const userAnswer = quizAnswers[q.id];
               const isCorrect = userAnswer === q.answer;
-              
+
               return (
-                <div 
+                <div
                   key={q.id || idx}
                   style={{
                     backgroundColor: "white",
@@ -290,8 +434,8 @@ export default function LearningAgent() {
                       height: "48px",
                       borderRadius: "50%",
                       background: showResult && isCorrect ? "linear-gradient(135deg, #10b981, #059669)" :
-                                  showResult && !isCorrect && userAnswer !== undefined ? "linear-gradient(135deg, #ef4444, #dc2626)" :
-                                  "linear-gradient(135deg, #667eea, #764ba2)",
+                        showResult && !isCorrect && userAnswer !== undefined ? "linear-gradient(135deg, #ef4444, #dc2626)" :
+                          "linear-gradient(135deg, #667eea, #764ba2)",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
@@ -300,9 +444,9 @@ export default function LearningAgent() {
                       fontSize: "1.25rem",
                       boxShadow: "0 4px 10px rgba(0,0,0,0.15)"
                     }}>
-                      {showResult && isCorrect ? "✓" : 
-                       showResult && !isCorrect && userAnswer !== undefined ? "✗" : 
-                       idx + 1}
+                      {showResult && isCorrect ? "✓" :
+                        showResult && !isCorrect && userAnswer !== undefined ? "✗" :
+                          idx + 1}
                     </div>
 
                     {/* Question Text */}
@@ -330,7 +474,7 @@ export default function LearningAgent() {
                   </div>
 
                   {/* Options Grid */}
-                  <div style={{ 
+                  <div style={{
                     display: "grid",
                     gridTemplateColumns: "1fr",
                     gap: "0.75rem"
@@ -353,15 +497,14 @@ export default function LearningAgent() {
                             padding: "1rem 1.25rem",
                             borderRadius: "10px",
                             cursor: showResult ? "default" : "pointer",
-                            backgroundColor: 
+                            backgroundColor:
                               showCorrect ? "#d1fae5" :
-                              showWrong ? "#fee2e2" :
-                              isSelected ? "#e0e7ff" : "#f9fafb",
-                            border: `2.5px solid ${
-                              showCorrect ? "#10b981" :
+                                showWrong ? "#fee2e2" :
+                                  isSelected ? "#e0e7ff" : "#f9fafb",
+                            border: `2.5px solid ${showCorrect ? "#10b981" :
                               showWrong ? "#ef4444" :
-                              isSelected ? "#667eea" : "#e5e7eb"
-                            }`,
+                                isSelected ? "#667eea" : "#e5e7eb"
+                              }`,
                             transition: "all 0.2s ease",
                             transform: isSelected && !showResult ? "translateX(4px)" : "none",
                             textAlign: "left",
@@ -374,10 +517,10 @@ export default function LearningAgent() {
                             minWidth: "40px",
                             height: "40px",
                             borderRadius: "8px",
-                            backgroundColor: 
+                            backgroundColor:
                               showCorrect ? "#10b981" :
-                              showWrong ? "#ef4444" :
-                              isSelected ? "#667eea" : "#e5e7eb",
+                                showWrong ? "#ef4444" :
+                                  isSelected ? "#667eea" : "#e5e7eb",
                             color: (isSelected || showCorrect || showWrong) ? "white" : "#6b7280",
                             display: "flex",
                             alignItems: "center",
@@ -507,8 +650,8 @@ export default function LearningAgent() {
                     margin: "0 auto 1.5rem",
                     borderRadius: "50%",
                     background: score.percent >= 80 ? "linear-gradient(135deg, #10b981, #059669)" :
-                                score.percent >= 60 ? "linear-gradient(135deg, #f59e0b, #d97706)" :
-                                "linear-gradient(135deg, #ef4444, #dc2626)",
+                      score.percent >= 60 ? "linear-gradient(135deg, #f59e0b, #d97706)" :
+                        "linear-gradient(135deg, #ef4444, #dc2626)",
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "center",

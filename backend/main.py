@@ -104,7 +104,7 @@ def learn(
             print(f"⚠️ Retriever not available: {e}")
         
         if not context:
-            context = f"Topic: {topic}. Use general knowledge about AI/Data Science."
+            context = f"No syllabus has been uploaded yet. The student is asking about: {topic}. Inform the student that they should upload their syllabus PDF first for accurate, course-specific answers."
 
         result = learning_flow(context, topic, stage)
         try:
@@ -153,7 +153,7 @@ def follow_up_chat(
 ):
     try:
         from backend.rag.retriever import get_retriever
-        from backend.agents.qa_agent import generate_answer
+        from backend.agents.qa_agent import generate_answer, GENERAL_PROMPT
         from backend.agents.learning_agent import learning_flow
         from backend.agents.agentic_rag import agentic_answer
         from backend.agents.progress_agent import track_activity
@@ -181,7 +181,7 @@ def follow_up_chat(
             return agentic_answer(question)
 
         prompt = f"User asks about {topic}: {question}\n\nContext:\n{combined_context}"
-        answer = generate_answer(combined_context, prompt)
+        answer = generate_answer(combined_context, prompt, system_prompt=GENERAL_PROMPT)
         return {"stage": mode.upper(), "content": answer}
     except Exception as e:
         return {"stage": "ERROR", "content": str(e)}

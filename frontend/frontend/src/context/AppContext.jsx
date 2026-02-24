@@ -31,6 +31,7 @@ export function AppProvider({ children }) {
     // ─── Per-page state cache ───
     const [pageStates, setPageStates] = useState({
         theory: null,
+        qa: null,
         lab: null,
         projects: null,
         research: null,

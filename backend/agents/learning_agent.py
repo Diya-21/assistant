@@ -52,29 +52,14 @@ def learning_flow(context: str, topic: str, stage: str):
     stage = stage.lower()
 
     if stage == "explain":
-        prompt = f"""
-Explain **{topic}** in a clear, structured way for a student who is new to this concept.
+        prompt = f"""Explain **{topic}** clearly for a beginner student. Structure your answer with these markdown sections:
+1. "## 🎯 What is {topic}?" — one paragraph definition
+2. "## 💡 Key Points" — 3-5 bullet points with bold titles
+3. "## 🔧 How It Works" — simple explanation, use an analogy
+4. "## 📱 Real-World Example" — one practical example
+5. "## ✅ Quick Summary" — one sentence summary
 
-Format your response using this structure:
-
-## 🎯 What is {topic}?
-A simple, one-paragraph definition that anyone can understand.
-
-## 💡 Key Points
-- **Point 1**: Brief explanation
-- **Point 2**: Brief explanation  
-- **Point 3**: Brief explanation
-
-## 🔧 How It Works
-Explain the mechanism or process in simple terms. Use an analogy if helpful.
-
-## 📱 Real-World Example
-Give one concrete, relatable example of how this is used in practice.
-
-## ✅ Quick Summary
-One sentence that captures the essence of this topic.
-
-Keep the explanation concise, use bullet points, and avoid jargon. Make it beginner-friendly.
+Write the actual content for each section. Be concise and use markdown formatting.
 """
         content = generate_answer(context=context, question=prompt)
         return {
@@ -84,48 +69,16 @@ Keep the explanation concise, use bullet points, and avoid jargon. Make it begin
         }
 
     if stage == "deep":
-        prompt = f"""
-Provide a **comprehensive technical explanation** of **{topic}** for a student preparing for exams.
+        prompt = f"""Give a comprehensive technical explanation of **{topic}** for exam preparation. Structure your answer with these markdown sections:
+1. "## 📚 In-Depth Overview" — detailed explanation of the topic
+2. "## 🔬 Technical Details" — with sub-sections for core concepts, step-by-step process, and any formulas (use LaTeX: $inline$ and $$block$$)
+3. "## 🏗️ Architecture/Components" — main components and how they interact
+4. "## ⚡ Advantages" — numbered list of benefits
+5. "## ⚠️ Limitations" — numbered list of drawbacks
+6. "## 🌍 Applications" — real-world use cases
+7. "## 🔗 Related Concepts" — connected topics
 
-Format your response using this structure:
-
-## 📚 In-Depth Overview
-A detailed explanation covering all important aspects.
-
-## 🔬 Technical Details
-
-### Core Concepts
-- **Concept 1**: Detailed explanation
-- **Concept 2**: Detailed explanation
-
-### How It Works (Step by Step)
-1. **Step 1**: What happens and why
-2. **Step 2**: What happens and why
-3. **Step 3**: What happens and why
-
-### Mathematical/Technical Formulas (if applicable)
-Include any relevant formulas or algorithms.
-
-## 🏗️ Architecture/Components
-Describe the main components and how they interact.
-
-## ⚡ Advantages
-1. Advantage 1
-2. Advantage 2
-
-## ⚠️ Limitations
-1. Limitation 1
-2. Limitation 2
-
-## 🌍 Applications
-- Application 1: Brief description
-- Application 2: Brief description
-
-## 🔗 Related Concepts
-- Related Topic 1 - How it connects
-- Related Topic 2 - How it connects
-
-Be thorough but organized. Use markdown formatting for clarity.
+Write detailed, actual content for every section. Use markdown tables where comparisons are useful.
 """
         content = generate_answer(context=context, question=prompt)
         return {
@@ -172,40 +125,73 @@ Focus on free and accessible resources when possible.
         }
 
     if stage == "quiz":
-        raw = generate_answer(
-            context=context,
-            question=QUIZ_PROMPT + f"\n\nTopic: {topic}\n\nContext:\n{context[:2000]}"
-        )
+        quiz_prompt = f"""Generate exactly 5 multiple-choice questions about **{topic}** based ONLY on the syllabus context provided.
 
-        try:
-            cleaned = clean_json_response(raw)
-            quiz_data = json.loads(cleaned)
-            
-            if "questions" not in quiz_data:
-                raise ValueError("Missing 'questions' key")
-            
-            questions = quiz_data["questions"]
-            
-            for q in questions:
-                if not all(k in q for k in ["question", "options", "answer"]):
-                    raise ValueError("Invalid question structure")
-                if len(q["options"]) != 4:
-                    raise ValueError("Each question must have exactly 4 options")
-            
-            return {
-                "stage": "QUIZ",
-                "questions": questions
-            }
-        except json.JSONDecodeError as e:
-            return {
-                "stage": "ERROR",
-                "content": f"Quiz generation failed: Invalid JSON format. Please try again."
-            }
-        except Exception as e:
-            return {
-                "stage": "ERROR",
-                "content": f"Quiz generation failed: {str(e)}"
-            }
+RULES:
+- Ask about CONCEPTS, DEFINITIONS, APPLICATIONS, and TECHNICAL KNOWLEDGE only
+- Do NOT ask about syllabus structure, course codes, or chapter titles
+- Each question must have exactly 4 options
+- Provide the correct option index (0, 1, 2, or 3)
+- Output ONLY valid JSON, nothing else — no explanation, no markdown
+
+Output this EXACT JSON structure:
+{{"questions": [{{"id": 1, "question": "What is...", "options": ["A", "B", "C", "D"], "answer": 2}}, {{"id": 2, "question": "Which...", "options": ["A", "B", "C", "D"], "answer": 0}}, {{"id": 3, "question": "How...", "options": ["A", "B", "C", "D"], "answer": 1}}, {{"id": 4, "question": "What...", "options": ["A", "B", "C", "D"], "answer": 3}}, {{"id": 5, "question": "Why...", "options": ["A", "B", "C", "D"], "answer": 1}}]}}
+
+IMPORTANT: Output ONLY the JSON object. No text before or after it."""
+
+        max_quiz_attempts = 3
+        last_error = None
+
+        for attempt in range(max_quiz_attempts):
+            try:
+                raw = generate_answer(
+                    context=context,
+                    question=quiz_prompt
+                )
+                
+                cleaned = clean_json_response(raw)
+                quiz_data = json.loads(cleaned)
+                
+                if "questions" not in quiz_data:
+                    raise ValueError("Missing 'questions' key")
+                
+                questions = quiz_data["questions"]
+                
+                if len(questions) < 2:
+                    raise ValueError("Too few questions generated")
+
+                valid_questions = []
+                for i, q in enumerate(questions):
+                    if not all(k in q for k in ["question", "options", "answer"]):
+                        continue
+                    if len(q["options"]) != 4:
+                        continue
+                    if "id" not in q:
+                        q["id"] = i + 1
+                    # Ensure answer is an integer
+                    q["answer"] = int(q["answer"])
+                    valid_questions.append(q)
+                
+                if len(valid_questions) < 2:
+                    raise ValueError("Not enough valid questions after filtering")
+
+                return {
+                    "stage": "QUIZ",
+                    "questions": valid_questions
+                }
+            except (json.JSONDecodeError, ValueError) as e:
+                last_error = str(e)
+                print(f"⚠️ Quiz attempt {attempt + 1}/{max_quiz_attempts} failed: {e}")
+                continue
+            except Exception as e:
+                last_error = str(e)
+                print(f"❌ Quiz attempt {attempt + 1}/{max_quiz_attempts} error: {e}")
+                continue
+
+        return {
+            "stage": "ERROR",
+            "content": f"⚠️ Quiz generation failed after {max_quiz_attempts} attempts. Error: {last_error}. Please try again."
+        }
 
     return {
         "stage": "ERROR",

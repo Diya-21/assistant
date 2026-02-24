@@ -6,7 +6,7 @@ import { useAppContext } from "../context/AppContext";
 
 export default function LearningAgent() {
   const { savePageState, getPageState, syllabusUploaded, syllabusName } = useAppContext();
-  const cached = getPageState("theory");
+  const cached = getPageState("qa");
 
   const [messages, setMessages] = useState(cached?.messages || []);
   const [input, setInput] = useState("");
@@ -50,7 +50,7 @@ export default function LearningAgent() {
   // Persist page state on changes
   useEffect(() => {
     if (messages.length > 0 || currentTopic) {
-      savePageState("theory", { messages, currentTopic, quizResults, quizScores });
+      savePageState("qa", { messages, currentTopic, quizResults, quizScores });
     }
   }, [messages, currentTopic, quizResults, quizScores]);
 

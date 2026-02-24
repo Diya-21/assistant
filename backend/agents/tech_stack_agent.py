@@ -4,7 +4,7 @@ Explains concepts, compares tools, and provides code guidance (not full generati
 """
 
 from backend.rag.retriever import get_retriever
-from backend.agents.qa_agent import generate_answer
+from backend.agents.qa_agent import generate_answer, GENERAL_PROMPT
 from backend.agents.agentic_rag import AgenticRAG
 import json
 import re
@@ -165,7 +165,8 @@ Be specific and practical. Focus on what a student can realistically learn and u
         
         response = generate_answer(
             context=context if context else "General tech knowledge",
-            question=prompt
+            question=prompt,
+            system_prompt=GENERAL_PROMPT
         )
         
         reasoning_trace.append("✅ Recommendations generated")
@@ -253,7 +254,8 @@ Be honest and balanced. Help the student make an informed decision.
         
         response = generate_answer(
             context=syllabus_context if syllabus_context else "General knowledge",
-            question=prompt
+            question=prompt,
+            system_prompt=GENERAL_PROMPT
         )
         
         reasoning_trace.append("✅ Comparison generated")
@@ -335,7 +337,8 @@ What to learn after understanding this concept.
         
         response = generate_answer(
             context=context if context else "General knowledge",
-            question=prompt
+            question=prompt,
+            system_prompt=GENERAL_PROMPT
         )
         
         reasoning_trace.append("✅ Explanation generated")
@@ -411,7 +414,8 @@ Help the student understand HOW to approach this, not just give them code to cop
         
         response = generate_answer(
             context=context if context else "General knowledge",
-            question=prompt
+            question=prompt,
+            system_prompt=GENERAL_PROMPT
         )
         
         reasoning_trace.append("✅ Guidance generated")
