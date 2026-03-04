@@ -1,12 +1,38 @@
-import { useState, useRef, useEffect } from "react";
-import { learnTopic, deepResearch, followUpChat } from "../api/backend";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { learnTopic, deepResearch, followUpChat, trackProgress } from "../api/backend";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAppContext } from "../context/AppContext";
+import mermaid from "mermaid";
 
-export default function LearningAgent() {
+mermaid.initialize({
+  startOnLoad: true,
+  theme: "default",
+  securityLevel: "loose",
+  fontFamily: "Inter, sans-serif",
+});
+
+const Mermaid = ({ chart }) => {
+  const ref = useRef(null);
+
+  useLayoutEffect(() => {
+    if (ref.current && chart) {
+      mermaid.contentLoaded();
+      mermaid.render(`mermaid-${Math.random().toString(36).substr(2, 9)}`, chart).then(({ svg }) => {
+        if (ref.current) ref.current.innerHTML = svg;
+      }).catch(err => {
+        console.error("Mermaid render error:", err);
+        if (ref.current) ref.current.innerText = "⚠️ Could not render diagram. Please check syntax.";
+      });
+    }
+  }, [chart]);
+
+  return <div key={chart} ref={ref} style={{ background: "white", padding: "1.5rem", borderRadius: "12px", border: "1px solid #e5e7eb", margin: "1rem 0", display: "flex", justifyContent: "center", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }} />;
+};
+
+export default function QAAgent() {
   const { savePageState, getPageState, syllabusUploaded, syllabusName } = useAppContext();
-  const cached = getPageState("qa");
+  const cached = getPageState("theory");
 
   const [messages, setMessages] = useState(cached?.messages || []);
   const [input, setInput] = useState("");
@@ -48,11 +74,16 @@ export default function LearningAgent() {
   }, [history]);
 
   // Persist page state on changes
+  const isFirstRender = useRef(true);
   useEffect(() => {
-    if (messages.length > 0 || currentTopic) {
-      savePageState("qa", { messages, currentTopic, quizResults, quizScores });
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
     }
-  }, [messages, currentTopic, quizResults, quizScores]);
+    if (messages.length > 0 || currentTopic) {
+      savePageState("theory", { messages, currentTopic, quizResults, quizScores });
+    }
+  }, [messages, currentTopic, quizResults, quizScores, savePageState]);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
@@ -154,11 +185,18 @@ export default function LearningAgent() {
     setQuizResults(prev => ({ ...prev, [msgIndex]: { ...(prev[msgIndex] || {}), [qId]: optionIndex } }));
   }
 
-  function submitThreadQuiz(msgIndex, questions) {
+  async function submitThreadQuiz(msgIndex, questions) {
     const answers = quizResults[msgIndex] || {};
     let correct = 0;
     questions.forEach(q => { if (answers[q.id] === q.answer) correct++; });
     setQuizScores(prev => ({ ...prev, [msgIndex]: { score: correct, total: questions.length } }));
+
+    // Track progress in backend
+    try {
+      await trackProgress(currentTopic || "Quiz", "quiz", correct, questions.length);
+    } catch (err) {
+      console.error("Failed to track progress:", err);
+    }
   }
 
   function startNewChat() {
@@ -282,7 +320,26 @@ export default function LearningAgent() {
                             <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "#667eea", fontWeight: 600 }} {...props}>
                               {children}
                             </a>
-                          )
+                          ),
+                          code: ({ node, inline, className, children, ...props }) => {
+                            const match = /language-(\w+)/.exec(className || "");
+                            if (!inline && match && match[1] === "mermaid") {
+                              return <Mermaid chart={String(children).replace(/\n$/, "")} />;
+                            }
+                            return (
+                              <code className={className} style={{
+                                background: inline ? "#f1f5f9" : "#1e293b",
+                                color: inline ? "#475569" : "#f8fafc",
+                                padding: inline ? "2px 4px" : "1rem",
+                                borderRadius: "4px",
+                                display: inline ? "inline" : "block",
+                                overflowX: "auto",
+                                fontSize: "0.9em"
+                              }} {...props}>
+                                {children}
+                              </code>
+                            );
+                          }
                         }}
                       >
                         {msg.content}

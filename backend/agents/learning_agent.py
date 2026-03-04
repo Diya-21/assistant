@@ -12,6 +12,7 @@ CRITICAL RULES:
 - Use ONLY the concepts and content from the provided context
 - Each question must have exactly 4 options
 - Provide correct option index (0-based: 0, 1, 2, or 3)
+- DO NOT use any asterisks (*) for formatting or emphasis in the JSON values
 - Output STRICT JSON format only
 
 GOOD EXAMPLES:
@@ -52,14 +53,20 @@ def learning_flow(context: str, topic: str, stage: str):
     stage = stage.lower()
 
     if stage == "explain":
-        prompt = f"""Explain **{topic}** clearly for a beginner student. Structure your answer with these markdown sections:
-1. "## 🎯 What is {topic}?" — one paragraph definition
-2. "## 💡 Key Points" — 3-5 bullet points with bold titles
-3. "## 🔧 How It Works" — simple explanation, use an analogy
-4. "## 📱 Real-World Example" — one practical example
-5. "## ✅ Quick Summary" — one sentence summary
+        prompt = f"""The student wants to learn about **{topic}**.
 
-Write the actual content for each section. Be concise and use markdown formatting.
+Provide a clear, accurate explanation that directly addresses this topic. Structure your answer naturally using markdown:
+- Start with a concise definition or overview (1-2 paragraphs)
+- Cover the key concepts and important points
+- Include a practical example or analogy if helpful
+- End with a brief summary
+
+IMPORTANT RULES:
+- Answer the topic DIRECTLY. Do not pad with irrelevant information.
+- Use ## headers to organize sections logically.
+- Do NOT generate quiz questions, multiple-choice questions, or test questions. Only explain.
+- If the context mentions the topic, base your explanation on it. If not, use general knowledge but stay accurate.
+- Be concise. Quality over quantity.
 """
         content = generate_answer(context=context, question=prompt)
         return {
@@ -69,16 +76,21 @@ Write the actual content for each section. Be concise and use markdown formattin
         }
 
     if stage == "deep":
-        prompt = f"""Give a comprehensive technical explanation of **{topic}** for exam preparation. Structure your answer with these markdown sections:
-1. "## 📚 In-Depth Overview" — detailed explanation of the topic
-2. "## 🔬 Technical Details" — with sub-sections for core concepts, step-by-step process, and any formulas (use LaTeX: $inline$ and $$block$$)
-3. "## 🏗️ Architecture/Components" — main components and how they interact
-4. "## ⚡ Advantages" — numbered list of benefits
-5. "## ⚠️ Limitations" — numbered list of drawbacks
-6. "## 🌍 Applications" — real-world use cases
-7. "## 🔗 Related Concepts" — connected topics
+        prompt = f"""Provide a comprehensive, exam-level explanation of **{topic}**.
 
-Write detailed, actual content for every section. Use markdown tables where comparisons are useful.
+Cover the following aspects in depth:
+- Detailed overview and core theory
+- Technical details, processes, and any relevant formulas (use LaTeX: $inline$ and $$block$$)
+- Architecture or components if applicable
+- Advantages and limitations
+- Real-world applications
+- Related concepts worth knowing
+
+IMPORTANT RULES:
+- Use ## headers and organize logically.
+- Use markdown tables for comparisons.
+- Do NOT generate quiz questions or MCQs. Only explain.
+- Be thorough but accurate — no filler or made-up facts.
 """
         content = generate_answer(context=context, question=prompt)
         return {
@@ -133,6 +145,7 @@ RULES:
 - Each question must have exactly 4 options
 - Provide the correct option index (0, 1, 2, or 3)
 - Output ONLY valid JSON, nothing else — no explanation, no markdown
+- DO NOT use any asterisks (*) for bolding or emphasis in the question text or options
 
 Output this EXACT JSON structure:
 {{"questions": [{{"id": 1, "question": "What is...", "options": ["A", "B", "C", "D"], "answer": 2}}, {{"id": 2, "question": "Which...", "options": ["A", "B", "C", "D"], "answer": 0}}, {{"id": 3, "question": "How...", "options": ["A", "B", "C", "D"], "answer": 1}}, {{"id": 4, "question": "What...", "options": ["A", "B", "C", "D"], "answer": 3}}, {{"id": 5, "question": "Why...", "options": ["A", "B", "C", "D"], "answer": 1}}]}}
@@ -168,6 +181,11 @@ IMPORTANT: Output ONLY the JSON object. No text before or after it."""
                         continue
                     if "id" not in q:
                         q["id"] = i + 1
+                    
+                    # Clean asterisks from question and options
+                    q["question"] = q["question"].replace("*", "")
+                    q["options"] = [opt.replace("*", "") for opt in q["options"]]
+                    
                     # Ensure answer is an integer
                     q["answer"] = int(q["answer"])
                     valid_questions.append(q)

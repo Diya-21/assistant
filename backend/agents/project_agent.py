@@ -30,7 +30,7 @@ class ProjectAgent:
         
         self.project_prompts = {
             "ideas": """
-Based on the context provided, suggest 5 innovative project ideas for a student.
+Based on the context provided, suggest exactly 5 innovative project ideas for a student.
 
 For each project, provide:
 1. **Title**: A catchy project name
@@ -39,7 +39,8 @@ For each project, provide:
 4. **Difficulty**: Easy / Medium / Hard
 5. **Innovation Factor**: What makes it unique
 
-Return as JSON:
+CRITICAL: Return ONLY a raw JSON object. NO preamble, NO markdown explanation, NO trailing text.
+Format:
 {
     "projects": [
         {
@@ -105,12 +106,18 @@ Focus on foundational understanding, not code.
         }
     
     def _clean_json(self, raw_text: str) -> str:
-        """Extract and clean JSON from LLM response"""
+        """Extract and clean JSON from LLM response more robustly"""
+        # Remove markdown code blocks if present
         raw_text = re.sub(r'```json\s*', '', raw_text)
         raw_text = re.sub(r'```\s*', '', raw_text)
-        json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
-        if json_match:
-            return json_match.group(0)
+        
+        # Find the first { and last }
+        first_idx = raw_text.find('{')
+        last_idx = raw_text.rfind('}')
+        
+        if first_idx != -1 and last_idx != -1:
+            return raw_text[first_idx:last_idx+1]
+        
         return raw_text.strip()
     
     def _retrieve_context(self, queries: List[str], k: int = 3) -> str:

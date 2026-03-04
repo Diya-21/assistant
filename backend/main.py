@@ -2,7 +2,8 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import traceback
-from typing import Optional
+from typing import Optional, List
+from backend.db_manager import init_db, add_user, get_user, store_history, get_history
 
 app = FastAPI(title="Multimodal AI Teaching Assistant")
 
@@ -49,6 +50,35 @@ def root():
 def health_check():
     return {"status": "healthy"}
 
+# ---------- AUTHENTICATION ----------
+@app.post("/auth/signup")
+def signup(name: str = Form(...), roll_no: str = Form(...), password: str = Form(None)):
+    success = add_user(name, roll_no, password)
+    if success:
+        return {"status": "success", "message": "User created successfully"}
+    else:
+        raise HTTPException(status_code=400, detail="User with this roll number already exists")
+
+@app.post("/auth/login")
+def login(roll_no: str = Form(...)):
+    user = get_user(roll_no)
+    if user:
+        return {
+            "status": "success", 
+            "user": {
+                "name": user["name"], 
+                "roll_no": user["roll_no"]
+            }
+        }
+    else:
+        raise HTTPException(status_code=404, detail="User not found. Please sign up.")
+
+# ---------- HISTORY ----------
+@app.get("/history/{user_id}")
+def get_user_history(user_id: str):
+    history = get_history(user_id)
+    return {"history": history}
+
 # ---------- UPLOAD SYLLABUS ----------
 @app.post("/upload-syllabus/")
 def upload_syllabus(file: UploadFile = File(...)):
@@ -71,7 +101,7 @@ def upload_syllabus(file: UploadFile = File(...)):
         chunks = chunk_text(text)
         print(f"✅ Chunked into {len(chunks)} fragments")
 
-        print("🏗️ Step 3: Generating embeddings and indexing (this may take 10-30s)...")
+        print("🏗️ Step 3: Generating embeddings and indexing...")
         get_vector_store(chunks)
         print("✅ Indexing complete!")
 
@@ -109,6 +139,7 @@ def learn(
         result = learning_flow(context, topic, stage)
         try:
             track_activity(user_id, topic, stage)
+            store_history(user_id, "learning", topic, str(result.get("content", "")), topic)
         except: pass
         return result
     except Exception as e:
@@ -129,6 +160,7 @@ def deep_research(
         result = agentic_answer(question)
         try:
             track_activity(user_id, question, "deep_research")
+            store_history(user_id, "search", question, result.get("content", ""), "Deep Research")
         except: pass
         return {
             "stage": "DEEP_RESEARCH",
@@ -180,8 +212,32 @@ def follow_up_chat(
         if mode == "agentic":
             return agentic_answer(question)
 
+        if mode == "diagram":
+            diagram_prompt = f"""Generate a clear, professional Mermaid diagram to visualize the concept of **{topic}**.
+            
+            STRUCTURE:
+            1. **Diagram**: Provide a high-quality Mermaid.js code block (e.g., flowchart TD, sequenceDiagram, classDiagram, etc.).
+            2. **Explanation**: Provide a detailed, step-by-step explanation of what the diagram shows and how the components interact.
+            
+            RULES:
+            - Respond ONLY with the Mermaid diagram and the explanation.
+            - Do NOT include any introductory or concluding filler.
+            - Ensure the Mermaid code is valid and well-commented.
+            - The explanation should be clear and academic.
+            
+            Question context: {question}
+            """
+            answer = generate_answer(combined_context, diagram_prompt, system_prompt=GENERAL_PROMPT)
+            try:
+                store_history(user_id, "chat", question, answer, topic)
+            except: pass
+            return {"stage": "DIAGRAM", "content": answer}
+
         prompt = f"User asks about {topic}: {question}\n\nContext:\n{combined_context}"
         answer = generate_answer(combined_context, prompt, system_prompt=GENERAL_PROMPT)
+        try:
+            store_history(user_id, "chat", question, answer, topic)
+        except: pass
         return {"stage": mode.upper(), "content": answer}
     except Exception as e:
         return {"stage": "ERROR", "content": str(e)}
@@ -213,6 +269,7 @@ def lab_agent(
         result = generate_lab_explanation(context, experiment, step)
         try:
             track_activity(user_id, experiment, "lab")
+            store_history(user_id, "lab", f"{experiment} ({step})", result.get("content", ""), experiment)
         except: pass
         return result
     except Exception as e:
@@ -220,7 +277,7 @@ def lab_agent(
 
 # ---------- QA ENDPOINT ----------
 @app.post("/ask/")
-def ask_question(question: str = Form(...)):
+def ask_question(question: str = Form(...), user_id: str = Form("default_user")):
     try:
         from backend.agents.qa_agent import generate_answer
         from backend.rag.retriever import get_retriever
@@ -228,6 +285,9 @@ def ask_question(question: str = Form(...)):
         docs = retriever.invoke(question)
         context = "\n\n".join(d.page_content for d in docs) if docs else "General knowledge."
         answer = generate_answer(context, question)
+        try:
+            store_history(user_id, "search", question, answer, "General QA")
+        except: pass
         return {"answer": answer}
     except Exception as e:
         return {"answer": f"Error: {str(e)}"}
@@ -261,10 +321,14 @@ async def get_user_analytics(user_id: str):
 
 # ---------- PROJECTS ----------
 @app.post("/project-ideas/")
-def project_ideas(subjects: str = Form(...)):
+def project_ideas(subjects: str = Form(...), user_id: str = Form("default_user")):
     try:
         from backend.agents.project_agent import generate_project_ideas
-        return generate_project_ideas(subjects)
+        result = generate_project_ideas(subjects)
+        try:
+            store_history(user_id, "project", subjects, str(result), "Project Ideas")
+        except: pass
+        return result
     except Exception as e:
         return {"stage": "ERROR", "content": str(e)}
 
@@ -278,10 +342,14 @@ def project_detail(project_title: str = Form(...), stage: str = Form("detailed")
 
 # ---------- RESEARCH ----------
 @app.post("/research/")
-def research_topic(topic: str = Form(...), include_papers: bool = Form(True)):
+def research_topic(topic: str = Form(...), include_papers: bool = Form(True), user_id: str = Form("default_user")):
     try:
         from backend.agents.research_agent import research
-        return research(topic, include_papers)
+        result = research(topic, include_papers)
+        try:
+            store_history(user_id, "research", topic, str(result.get("content", "")), topic)
+        except: pass
+        return result
     except Exception as e:
         return {"stage": "ERROR", "content": str(e)}
 
@@ -295,34 +363,50 @@ def search_research_papers(query: str = Form(...)):
 
 # ---------- TECH STACK ----------
 @app.post("/tech-stack/")
-def tech_stack_recommendation(project_type: str = Form(...), requirements: str = Form("")):
+def tech_stack_recommendation(project_type: str = Form(...), requirements: str = Form(""), user_id: str = Form("default_user")):
     try:
         from backend.agents.tech_stack_agent import recommend_tech_stack
-        return recommend_tech_stack(project_type, requirements)
+        result = recommend_tech_stack(project_type, requirements)
+        try:
+            store_history(user_id, "tech_stack", f"Tech stack for: {project_type}", str(result.get('recommendations', '')), "Tech Stack")
+        except: pass
+        return result
     except Exception as e:
         return {"stage": "ERROR", "content": str(e)}
 
 @app.post("/compare-tech/")
-def compare_technologies(tech1: str = Form(...), tech2: str = Form(...), context: str = Form("")):
+def compare_technologies(tech1: str = Form(...), tech2: str = Form(...), context: str = Form(""), user_id: str = Form("default_user")):
     try:
         from backend.agents.tech_stack_agent import compare_tech
-        return compare_tech(tech1, tech2, context)
+        result = compare_tech(tech1, tech2, context)
+        try:
+            store_history(user_id, "tech_stack", f"Compare: {tech1} vs {tech2}", str(result.get('comparison', '')), "Tech Compare")
+        except: pass
+        return result
     except Exception as e:
         return {"stage": "ERROR", "content": str(e)}
 
 @app.post("/explain-tech/")
-def explain_technology(concept: str = Form(...), depth: str = Form("intermediate")):
+def explain_technology(concept: str = Form(...), depth: str = Form("intermediate"), user_id: str = Form("default_user")):
     try:
         from backend.agents.tech_stack_agent import explain_tech
-        return explain_tech(concept, depth)
+        result = explain_tech(concept, depth)
+        try:
+            store_history(user_id, "tech_stack", f"Explain: {concept} ({depth})", str(result.get('explanation', '')), "Tech Explain")
+        except: pass
+        return result
     except Exception as e:
         return {"stage": "ERROR", "content": str(e)}
 
 @app.post("/code-help/")
-def code_help(task: str = Form(...), technology: str = Form(...)):
+def code_help(task: str = Form(...), technology: str = Form(...), user_id: str = Form("default_user")):
     try:
         from backend.agents.tech_stack_agent import get_code_help
-        return get_code_help(task, technology)
+        result = get_code_help(task, technology)
+        try:
+            store_history(user_id, "tech_stack", f"Code help: {task} ({technology})", str(result.get('guidance', '')), "Code Help")
+        except: pass
+        return result
     except Exception as e:
         return {"stage": "ERROR", "content": str(e)}
 
@@ -333,4 +417,5 @@ async def performance_analysis(user_id: str):
 
 @app.on_event("startup")
 async def startup_event():
-    print("🎓 Backend Started Successfully")
+    init_db()
+    print("Backend Started Successfully")

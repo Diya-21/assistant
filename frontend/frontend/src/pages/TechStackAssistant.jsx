@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { getTechStack, compareTech, explainTech, getCodeHelp } from "../api/backend";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -31,11 +31,16 @@ export default function TechStackAssistant() {
     const [technology, setTechnology] = useState(cached?.technology || "");
 
     // Persist page state on changes
+    const isFirstRender = useRef(true);
     useEffect(() => {
+        if (isFirstRender.current) {
+            isFirstRender.current = false;
+            return;
+        }
         if (result || projectType || tech1 || concept || task) {
             savePageState("techStack", { activeMode, result, projectType, requirements, tech1, tech2, compareContext, concept, task, technology });
         }
-    }, [activeMode, result, projectType, requirements, tech1, tech2, compareContext, concept, task, technology]);
+    }, [activeMode, result, projectType, requirements, tech1, tech2, compareContext, concept, task, technology, savePageState]);
 
 
     const handleSubmit = async () => {

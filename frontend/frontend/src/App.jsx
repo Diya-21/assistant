@@ -11,6 +11,7 @@ import ProgressTracker from "./pages/ProgressTracker";
 import ProjectAssistant from "./pages/ProjectAssistant";
 import ResearchAssistant from "./pages/ResearchAssistant";
 import TechStackAssistant from "./pages/TechStackAssistant";
+import History from "./pages/History";
 
 import "./styles/theme.css";
 import "./styles/layout.css";
@@ -38,6 +39,7 @@ function AppRoutes() {
       <Route path="/projects" element={<ProtectedRoute><ProjectAssistant /></ProtectedRoute>} />
       <Route path="/research" element={<ProtectedRoute><ResearchAssistant /></ProtectedRoute>} />
       <Route path="/tech-stack" element={<ProtectedRoute><TechStackAssistant /></ProtectedRoute>} />
+      <Route path="/history" element={<ProtectedRoute><History /></ProtectedRoute>} />
 
       {/* Default redirect */}
       <Route path="*" element={<Navigate to={isLoggedIn ? "/dashboard" : "/login"} />} />

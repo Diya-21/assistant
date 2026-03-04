@@ -1,15 +1,29 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { uploadSyllabus } from "../api/backend";
 import { useAppContext } from "../context/AppContext";
 
 export default function UploadSyllabus() {
-  const { setSyllabusUploaded, setSyllabusName } = useAppContext();
+  const { setSyllabusUploaded, setSyllabusName, savePageState, getPageState } = useAppContext();
+  const cached = getPageState("upload");
+
   const [file, setFile] = useState(null);
-  const [status, setStatus] = useState("");
-  const [isSuccess, setIsSuccess] = useState(false);
+  const [status, setStatus] = useState(cached?.status || "");
+  const [isSuccess, setIsSuccess] = useState(cached?.isSuccess || false);
   const [loading, setLoading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef(null);
+
+  // Persist state on changes
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    if (status || isSuccess) {
+      savePageState("upload", { status, isSuccess });
+    }
+  }, [status, isSuccess, savePageState]);
 
   const handleUpload = async () => {
     if (!file) {

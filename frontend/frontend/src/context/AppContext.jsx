@@ -13,8 +13,9 @@ export function AppProvider({ children }) {
         const info = { name, rollNo, loginTime: new Date().toISOString() };
         localStorage.setItem("student_info", JSON.stringify(info));
 
-        // Ensure the user_id matches the rollNo for progress tracking
+        // Ensure the IDs match for progress and history tracking
         localStorage.setItem("user_id", rollNo);
+        localStorage.setItem("student_roll_no", rollNo);
 
         setStudent(info);
     }, []);
@@ -28,18 +29,42 @@ export function AppProvider({ children }) {
     const [syllabusUploaded, setSyllabusUploaded] = useState(false);
     const [syllabusName, setSyllabusName] = useState("");
 
-    // ─── Per-page state cache ───
-    const [pageStates, setPageStates] = useState({
-        theory: null,
-        qa: null,
-        lab: null,
-        projects: null,
-        research: null,
-        techStack: null,
+    // ─── Per-page state cache (backed by sessionStorage) ───
+    const [pageStates, setPageStates] = useState(() => {
+        try {
+            const saved = sessionStorage.getItem("page_states");
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                return {
+                    theory: parsed.theory || null,
+                    qa: parsed.qa || null,
+                    lab: parsed.lab || null,
+                    projects: parsed.projects || null,
+                    research: parsed.research || null,
+                    techStack: parsed.techStack || null,
+                    upload: parsed.upload || null,
+                };
+            }
+        } catch (e) { /* ignore parse errors */ }
+        return {
+            theory: null,
+            qa: null,
+            lab: null,
+            projects: null,
+            research: null,
+            techStack: null,
+            upload: null,
+        };
     });
 
     const savePageState = useCallback((pageKey, state) => {
-        setPageStates((prev) => ({ ...prev, [pageKey]: state }));
+        setPageStates((prev) => {
+            const next = { ...prev, [pageKey]: state };
+            try {
+                sessionStorage.setItem("page_states", JSON.stringify(next));
+            } catch (e) { /* storage full, ignore */ }
+            return next;
+        });
     }, []);
 
     const getPageState = useCallback(
@@ -48,7 +73,13 @@ export function AppProvider({ children }) {
     );
 
     const clearPageState = useCallback((pageKey) => {
-        setPageStates((prev) => ({ ...prev, [pageKey]: null }));
+        setPageStates((prev) => {
+            const next = { ...prev, [pageKey]: null };
+            try {
+                sessionStorage.setItem("page_states", JSON.stringify(next));
+            } catch (e) { /* ignore */ }
+            return next;
+        });
     }, []);
 
     const value = {

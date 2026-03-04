@@ -1,22 +1,58 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
+import { login as apiLogin, signup as apiSignup } from "../api/backend";
 
 export default function Login() {
-    const { login } = useAppContext();
+    const { login: contextLogin } = useAppContext();
     const navigate = useNavigate();
     const [name, setName] = useState("");
     const [rollNo, setRollNo] = useState("");
+    const [password, setPassword] = useState("");
+    const [isSignup, setIsSignup] = useState(false);
     const [error, setError] = useState("");
+    const [loading, setLoading] = useState(false);
 
-    const handleLogin = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!name.trim() || !rollNo.trim()) {
-            setError("Please fill in both fields.");
+        setError("");
+
+        if (!rollNo.trim()) {
+            setError("Please enter your roll number.");
             return;
         }
-        login(name.trim(), rollNo.trim());
-        navigate("/dashboard");
+
+        if (isSignup && !name.trim()) {
+            setError("Please enter your name for signup.");
+            return;
+        }
+
+        setLoading(true);
+        try {
+            if (isSignup) {
+                const res = await apiSignup(name.trim(), rollNo.trim(), password);
+                if (res.status === "success") {
+                    // After signup, automatically login
+                    const loginRes = await apiLogin(rollNo.trim());
+                    contextLogin(loginRes.user.name, loginRes.user.roll_no);
+                    navigate("/dashboard");
+                } else {
+                    setError(res.detail || "Signup failed.");
+                }
+            } else {
+                const res = await apiLogin(rollNo.trim());
+                if (res.status === "success") {
+                    contextLogin(res.user.name, res.user.roll_no);
+                    navigate("/dashboard");
+                } else {
+                    setError(res.detail || "Login failed.");
+                }
+            }
+        } catch (err) {
+            setError(err.response?.data?.detail || "An error occurred. Please try again.");
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -33,18 +69,35 @@ export default function Login() {
                     <p style={styles.subtitle}>AI-Powered Multimodal Teaching Assistant</p>
                 </div>
 
-                <form onSubmit={handleLogin} style={styles.form}>
-                    <div style={styles.inputGroup}>
-                        <label style={styles.label}>👤 Student Name</label>
-                        <input
-                            type="text"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            placeholder="Enter your full name"
-                            style={styles.input}
-                            autoFocus
-                        />
-                    </div>
+                <div style={styles.tabs}>
+                    <button
+                        onClick={() => { setIsSignup(false); setError(""); }}
+                        style={{ ...styles.tab, ...(isSignup ? {} : styles.activeTab) }}
+                    >
+                        Sign In
+                    </button>
+                    <button
+                        onClick={() => { setIsSignup(true); setError(""); }}
+                        style={{ ...styles.tab, ...(isSignup ? styles.activeTab : {}) }}
+                    >
+                        Sign Up
+                    </button>
+                </div>
+
+                <form onSubmit={handleSubmit} style={styles.form}>
+                    {isSignup && (
+                        <div style={styles.inputGroup}>
+                            <label style={styles.label}>👤 Student Name</label>
+                            <input
+                                type="text"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                placeholder="Enter your full name"
+                                style={styles.input}
+                                autoFocus
+                            />
+                        </div>
+                    )}
 
                     <div style={styles.inputGroup}>
                         <label style={styles.label}>🆔 Roll Number</label>
@@ -57,10 +110,23 @@ export default function Login() {
                         />
                     </div>
 
+                    {isSignup && (
+                        <div style={styles.inputGroup}>
+                            <label style={styles.label}>🔑 Password (Optional)</label>
+                            <input
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="Optional password"
+                                style={styles.input}
+                            />
+                        </div>
+                    )}
+
                     {error && <div style={styles.error}>{error}</div>}
 
-                    <button type="submit" style={styles.loginBtn}>
-                        🚀 Start Learning
+                    <button type="submit" style={styles.loginBtn} disabled={loading}>
+                        {loading ? "⏳ Processing..." : (isSignup ? "✨ Create Account" : "🚀 Start Learning")}
                     </button>
                 </form>
 
@@ -161,6 +227,30 @@ const styles = {
         color: "rgba(255, 255, 255, 0.6)",
         fontSize: "0.9rem",
         margin: 0,
+    },
+    tabs: {
+        display: "flex",
+        background: "rgba(255, 255, 255, 0.05)",
+        borderRadius: "12px",
+        padding: "4px",
+        marginBottom: "24px",
+    },
+    tab: {
+        flex: 1,
+        padding: "10px",
+        border: "none",
+        background: "transparent",
+        color: "rgba(255, 255, 255, 0.6)",
+        fontSize: "0.9rem",
+        fontWeight: "600",
+        cursor: "pointer",
+        borderRadius: "8px",
+        transition: "all 0.2s",
+    },
+    activeTab: {
+        background: "rgba(255, 255, 255, 0.1)",
+        color: "white",
+        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
     },
     form: {
         display: "flex",

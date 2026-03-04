@@ -23,6 +23,7 @@ export default function Navbar() {
         <NavLink to="/tech-stack" style={navLinkStyle}>🛠️ Tech Stack</NavLink>
         <NavLink to="/theory" style={navLinkStyle}>📚 Theory</NavLink>
         <NavLink to="/lab" style={navLinkStyle}>🧪 Lab</NavLink>
+        <NavLink to="/history" style={navLinkStyle}>📜 History</NavLink>
         <NavLink to="/progress" style={navLinkStyle}>📊 Progress</NavLink>
         {syllabusUploaded && (
           <span style={styles.syllabusChip} title={syllabusName}>

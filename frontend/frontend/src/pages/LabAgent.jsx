@@ -2,8 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAppContext } from "../context/AppContext";
-
-const API_BASE = "http://127.0.0.1:8080";
+import { runLab, followUpChat } from "../api/backend";
 
 export default function LabAgent() {
   const { savePageState, getPageState } = useAppContext();
@@ -26,25 +25,22 @@ export default function LabAgent() {
   // Persist page state on changes
   useEffect(() => {
     if (experiment || content) {
-      savePageState("lab", { experiment, stage, content, history, labChat });
+      // Truncate long content for sessionStorage
+      const trimmedHistory = history.map(h => ({
+        ...h,
+        content: h.content ? h.content.substring(0, 5000) : h.content,
+      }));
+      const trimmedContent = content ? content.substring(0, 5000) : content;
+      savePageState("lab", { experiment, stage, content: trimmedContent, history: trimmedHistory, labChat });
     }
-  }, [experiment, stage, content, history, labChat]);
+  }, [experiment, stage, content, history, labChat, savePageState]);
 
   const callLabAgent = async (step) => {
     setLoading(true);
     setError("");
 
     try {
-      const formData = new FormData();
-      formData.append("experiment", experiment);
-      formData.append("step", step);
-
-      const res = await fetch(`${API_BASE}/lab/`, {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await res.json();
+      const data = await runLab(experiment, step);
 
       // Backend returns { stage, content } directly
       if (!data.content) {
@@ -101,20 +97,7 @@ export default function LabAgent() {
 
     try {
       const contextStr = newMsgs.map(m => `${m.role === "user" ? "Student" : "Instructor"}: ${m.content}`).join("\n");
-
-      const formData = new FormData();
-      formData.append("topic", experiment);
-      formData.append("question", userMsg.content);
-      formData.append("context", contextStr);
-      formData.append("mode", "chat");
-      formData.append("user_id", localStorage.getItem("user_id") || "default");
-
-      const res = await fetch(`${API_BASE}/follow-up/`, {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await res.json();
+      const data = await followUpChat(experiment, userMsg.content, contextStr, "chat");
       const aiMsg = { role: "assistant", content: data.content, timestamp: new Date().toISOString() };
       setLabChat(prev => ({ ...prev, [experiment]: [...newMsgs, aiMsg] }));
     } catch (err) {

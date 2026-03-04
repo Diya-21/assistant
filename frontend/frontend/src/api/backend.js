@@ -4,6 +4,9 @@ const BASE = "http://127.0.0.1:8080";
 
 // Helper to get user ID consistently
 function getUserIdLocal() {
+  const rollNo = localStorage.getItem('student_roll_no');
+  if (rollNo) return rollNo;
+
   let userId = localStorage.getItem('user_id');
   if (!userId) {
     userId = 'user_' + Math.random().toString(36).substr(2, 9);
@@ -13,6 +16,47 @@ function getUserIdLocal() {
 }
 
 const getUserId = getUserIdLocal;
+
+/* ---------- Auth ---------- */
+export async function signup(name, rollNo, password = "") {
+  const form = new FormData();
+  form.append("name", name);
+  form.append("roll_no", rollNo);
+  if (password) form.append("password", password);
+
+  const res = await fetch(`${API_BASE}/auth/signup`, {
+    method: "POST",
+    body: form,
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw { response: { data: errorData } };
+  }
+  return res.json();
+}
+
+export async function login(rollNo) {
+  const form = new FormData();
+  form.append("roll_no", rollNo);
+
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: "POST",
+    body: form,
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw { response: { data: errorData } };
+  }
+  return res.json();
+}
+
+/* ---------- History ---------- */
+export async function getUserHistory() {
+  const res = await fetch(`${API_BASE}/history/${getUserId()}`);
+  return res.json();
+}
 
 /* ---------- Upload Syllabus ---------- */
 export async function uploadSyllabus(file) {
@@ -31,6 +75,7 @@ export async function uploadSyllabus(file) {
 export async function askQuestion(question) {
   const formData = new FormData();
   formData.append("question", question);
+  formData.append("user_id", getUserIdLocal());
 
   const res = await fetch(`${API_BASE}/ask/`, {
     method: "POST",
@@ -142,6 +187,7 @@ export async function getPerformance() {
 export async function getProjectIdeas(subjects) {
   const form = new FormData();
   form.append("subjects", subjects);
+  form.append("user_id", getUserIdLocal());
 
   const res = await fetch(`${API_BASE}/project-ideas/`, {
     method: "POST",
@@ -169,6 +215,7 @@ export async function researchTopic(topic, includePapers = true) {
   const form = new FormData();
   form.append("topic", topic);
   form.append("include_papers", includePapers);
+  form.append("user_id", getUserIdLocal());
 
   const res = await fetch(`${API_BASE}/research/`, {
     method: "POST",
@@ -195,6 +242,7 @@ export async function getTechStack(projectType, requirements = "") {
   const form = new FormData();
   form.append("project_type", projectType);
   form.append("requirements", requirements);
+  form.append("user_id", getUserIdLocal());
 
   const res = await fetch(`${API_BASE}/tech-stack/`, {
     method: "POST",
@@ -209,6 +257,7 @@ export async function compareTech(tech1, tech2, context = "") {
   form.append("tech1", tech1);
   form.append("tech2", tech2);
   form.append("context", context);
+  form.append("user_id", getUserIdLocal());
 
   const res = await fetch(`${API_BASE}/compare-tech/`, {
     method: "POST",
@@ -222,6 +271,7 @@ export async function explainTech(concept, depth = "intermediate") {
   const form = new FormData();
   form.append("concept", concept);
   form.append("depth", depth);
+  form.append("user_id", getUserIdLocal());
 
   const res = await fetch(`${API_BASE}/explain-tech/`, {
     method: "POST",
@@ -235,6 +285,7 @@ export async function getCodeHelp(task, technology) {
   const form = new FormData();
   form.append("task", task);
   form.append("technology", technology);
+  form.append("user_id", getUserIdLocal());
 
   const res = await fetch(`${API_BASE}/code-help/`, {
     method: "POST",

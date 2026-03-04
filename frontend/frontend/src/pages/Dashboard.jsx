@@ -251,6 +251,7 @@ const quickLinks = [
     { icon: "💡", label: "Projects", path: "/projects" },
     { icon: "🔬", label: "Research", path: "/research" },
     { icon: "🛠️", label: "Tech Stack", path: "/tech-stack" },
+    { icon: "📜", label: "History", path: "/history" },
     { icon: "📊", label: "Full Progress", path: "/progress" },
 ];
 

@@ -26,6 +26,7 @@ Rules:
 8. For comparisons: always use a markdown table format.
 9. For mathematical formulas: use LaTeX notation with $ for inline and $$ for block equations.
 10. Keep font sizes natural — use ## for sections, ### for sub-sections only.
+11. NEVER generate quiz questions, multiple-choice questions, or test items in your response unless the user EXPLICITLY asks for a quiz. Your job is to EXPLAIN, not to test.
 
 IMPORTANT: Your knowledge boundary is the SYLLABUS CONTEXT. Do not go beyond it.
 """
@@ -43,6 +44,7 @@ Rules:
 7. For comparisons: always use a markdown table format.
 8. For mathematical formulas: use LaTeX notation with $ for inline and $$ for block equations.
 9. Keep font sizes natural — use ## for sections, ### for sub-sections only.
+10. NEVER generate quiz questions, multiple-choice questions, or test items unless the user EXPLICITLY asks for a quiz. Your job is to EXPLAIN, not to test.
 """
 
 import re as _re

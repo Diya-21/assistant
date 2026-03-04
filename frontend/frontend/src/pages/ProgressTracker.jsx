@@ -42,7 +42,6 @@ export default function ProgressTracker() {
   const masteredCount = progress?.summary?.mastered_topics || 0;
   const topics = progress?.topics || {};
   const weakTopics = progress?.summary?.weak_topics || [];
-  const achievements = progress?.achievements || [];
   const totalActivities = progress?.total_activities || 0;
 
   if (loading) {
@@ -108,7 +107,6 @@ export default function ProgressTracker() {
           <StatCard icon="📊" value={`${avgScore}%`} label="Average Score" color="#10b981" detail={avgScore >= 80 ? "Excellent!" : avgScore >= 60 ? "Good progress" : "Room to grow"} />
           <StatCard icon="⏱️" value={`${(totalActivities * 5) || 0}m`} label="Est. Study Time" color="#8b5cf6" detail="Based on activities" />
           <StatCard icon="🔥" value={streakDays} label="Day Streak" color="#ef4444" detail="Learn daily!" />
-          <StatCard icon="🏆" value={achievements.length} label="Achievements" color="#06b6d4" detail={`of 6 unlocked`} />
         </div>
 
         {/* Tabs */}
@@ -118,7 +116,6 @@ export default function ProgressTracker() {
               { id: "overview", icon: "📈", label: "Overview" },
               { id: "subjects", icon: "📚", label: "Subject Tracker" },
               { id: "attention", icon: "⚠️", label: "Needs Attention" },
-              { id: "achievements", icon: "🏆", label: "Achievements" },
               { id: "performance", icon: "🎯", label: "AI Analysis" },
             ].map((tab) => (
               <button
@@ -143,7 +140,6 @@ export default function ProgressTracker() {
               recommendations={recommendations}
               analytics={analytics}
               topics={topics}
-              weakTopics={weakTopics}
             />
           )}
           {activeTab === "subjects" && (
@@ -155,9 +151,6 @@ export default function ProgressTracker() {
               performance={performance}
               topics={topics}
             />
-          )}
-          {activeTab === "achievements" && (
-            <AchievementsTab achievements={achievements} />
           )}
           {activeTab === "performance" && (
             <PerformanceTab performance={performance} />
@@ -183,7 +176,7 @@ function StatCard({ icon, value, label, color, detail }) {
 }
 
 /* ─────────── Overview Tab ─────────── */
-function OverviewTab({ progress, recommendations, analytics, topics, weakTopics }) {
+function OverviewTab({ progress, recommendations, analytics, topics }) {
   const topicEntries = Object.entries(topics);
 
   return (
@@ -255,26 +248,6 @@ function OverviewTab({ progress, recommendations, analytics, topics, weakTopics 
           )}
         </div>
 
-        {/* Weak Topics Alert */}
-        <div style={{ ...styles.card, borderLeft: weakTopics.length > 0 ? "4px solid #ef4444" : "4px solid #10b981" }}>
-          <h3 style={styles.cardTitle}>{weakTopics.length > 0 ? "⚠️ Topics Needing Attention" : "✅ All Topics On Track"}</h3>
-          {weakTopics.length > 0 ? (
-            <div>
-              {weakTopics.map((topic, i) => (
-                <div key={i} style={styles.weakItem}>
-                  <span>{topic.topic}</span>
-                  <span style={styles.weakScore}>{topic.average_score}%</span>
-                </div>
-              ))}
-              <p style={styles.weakHint}>These topics scored below average. Review them to improve your overall performance.</p>
-            </div>
-          ) : (
-            <div style={styles.zeroState}>
-              <span style={{ fontSize: "2rem" }}>🎉</span>
-              <p>{Object.keys(topics).length > 0 ? "Great job! No weak areas detected." : "Start studying to track which topics need extra attention."}</p>
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );
@@ -463,42 +436,6 @@ function AttentionTab({ weakTopics, performance, topics }) {
   );
 }
 
-/* ─────────── Achievements Tab ─────────── */
-function AchievementsTab({ achievements }) {
-  const allAchievements = [
-    { id: "first_steps", icon: "👶", title: "First Steps", desc: "Started your learning journey", color: "#10b981" },
-    { id: "quiz_master", icon: "🏆", title: "Quiz Master", desc: "Scored 80%+ on 5 quizzes", color: "#f59e0b" },
-    { id: "explorer", icon: "🗺️", title: "Explorer", desc: "Studied 5 different topics", color: "#8b5cf6" },
-    { id: "perfectionist", icon: "💯", title: "Perfectionist", desc: "Got 100% on a quiz", color: "#ef4444" },
-    { id: "streak_week", icon: "🔥", title: "On Fire", desc: "7-day learning streak", color: "#f97316" },
-    { id: "deep_diver", icon: "🔬", title: "Deep Diver", desc: "Deep explanations for 10 topics", color: "#06b6d4" },
-  ];
-
-  return (
-    <div style={styles.achievementsGrid}>
-      {allAchievements.map((a) => {
-        const unlocked = achievements.includes(a.id);
-        return (
-          <div key={a.id} style={{
-            ...styles.achievementCard,
-            ...(unlocked ? { background: `linear-gradient(135deg, ${a.color}08, ${a.color}15)`, border: `2px solid ${a.color}30` } : { opacity: 0.5, filter: "grayscale(0.5)" }),
-          }}>
-            <div style={{ ...styles.achievementIconBg, background: unlocked ? `${a.color}20` : "#f3f4f6" }}>
-              <span style={{ fontSize: "2.5rem" }}>{a.icon}</span>
-            </div>
-            <h3 style={styles.achievementTitle}>{a.title}</h3>
-            <p style={styles.achievementDesc}>{a.desc}</p>
-            {unlocked ? (
-              <span style={{ ...styles.achievementBadge, background: a.color }}>✓ Unlocked</span>
-            ) : (
-              <span style={styles.achievementBadgeLocked}>🔒 Locked</span>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 /* ─────────── Performance Tab (AI Analysis) ─────────── */
 function PerformanceTab({ performance }) {
@@ -776,14 +713,7 @@ const styles = {
   focusReason: { color: "#6b7280", fontSize: "0.85rem", margin: "4px 0" },
   focusAction: { color: "#374151", fontSize: "0.85rem", fontWeight: "500", margin: 0 },
 
-  /* Achievements */
-  achievementsGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "20px" },
-  achievementCard: { background: "white", borderRadius: "16px", padding: "28px 20px", textAlign: "center", boxShadow: "0 4px 20px rgba(0,0,0,0.06)", border: "2px solid transparent", transition: "all 0.3s" },
-  achievementIconBg: { width: "80px", height: "80px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" },
-  achievementTitle: { fontSize: "1rem", fontWeight: "700", color: "#1f2937", margin: "0 0 4px 0" },
-  achievementDesc: { color: "#6b7280", fontSize: "0.8rem", margin: "0 0 12px 0" },
-  achievementBadge: { display: "inline-block", padding: "4px 14px", borderRadius: "20px", color: "white", fontSize: "0.8rem", fontWeight: "600" },
-  achievementBadgeLocked: { display: "inline-block", padding: "4px 14px", borderRadius: "20px", background: "#f3f4f6", color: "#9ca3af", fontSize: "0.8rem", fontWeight: "600" },
+
 
   /* Performance tab */
   performanceGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" },

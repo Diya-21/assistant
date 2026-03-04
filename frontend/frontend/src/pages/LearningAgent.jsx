@@ -1,12 +1,39 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useLayoutEffect } from "react";
 import PageContainer from "../components/PageContainer";
-import { learnTopic } from "../api/backend";
+import { learnTopic, trackProgress } from "../api/backend";
 import { useAppContext } from "../context/AppContext";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
+import mermaid from "mermaid";
+
+mermaid.initialize({
+  startOnLoad: true,
+  theme: "default",
+  securityLevel: "loose",
+  fontFamily: "Inter, sans-serif",
+});
+
+const Mermaid = ({ chart }) => {
+  const ref = useRef(null);
+
+  useLayoutEffect(() => {
+    if (ref.current && chart) {
+      mermaid.contentLoaded();
+      mermaid.render(`mermaid-${Math.random().toString(36).substr(2, 9)}`, chart).then(({ svg }) => {
+        if (ref.current) ref.current.innerHTML = svg;
+      }).catch(err => {
+        console.error("Mermaid render error:", err);
+        if (ref.current) ref.current.innerText = "⚠️ Could not render diagram. Please check syntax.";
+      });
+    }
+  }, [chart]);
+
+  return <div ref={ref} style={{ background: "white", padding: "1.5rem", borderRadius: "12px", border: "1px solid #e5e7eb", margin: "1rem 0", display: "flex", justifyContent: "center", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }} />;
+};
+
 
 export default function LearningAgent() {
   const { savePageState, getPageState } = useAppContext();
@@ -20,13 +47,15 @@ export default function LearningAgent() {
   const [error, setError] = useState("");
 
   // Save state to AppContext whenever it changes
-  const isFirstRender = useRef(true);
   useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
+    if (topic || stages.length > 0) {
+      // Truncate very long content to prevent sessionStorage quota issues
+      const trimmedStages = stages.map(s => ({
+        ...s,
+        content: s.content ? s.content.substring(0, 5000) : s.content,
+      }));
+      savePageState("theory", { topic, stages: trimmedStages, quizAnswers, score });
     }
-    savePageState("theory", { topic, stages, quizAnswers, score });
   }, [topic, stages, quizAnswers, score, savePageState]);
 
   async function handleAsk(stage) {
@@ -58,7 +87,7 @@ export default function LearningAgent() {
     }
   }
 
-  function submitQuiz() {
+  async function submitQuiz() {
     const quizStage = stages.find(s => s.stage === "QUIZ");
     if (!quizStage?.questions) return;
 
@@ -71,6 +100,13 @@ export default function LearningAgent() {
 
     const percent = Math.round((correct / quizStage.questions.length) * 100);
     setScore({ correct, total: quizStage.questions.length, percent });
+
+    // Save to backend
+    try {
+      await trackProgress(topic, "quiz", correct, quizStage.questions.length);
+    } catch (err) {
+      console.error("Failed to track progress:", err);
+    }
   }
 
   function resetAgent() {
@@ -163,6 +199,10 @@ export default function LearningAgent() {
       return <tr style={{ background: isEven ? "#f9fafb" : "white" }}>{children}</tr>;
     },
     code: ({ inline, className, children }) => {
+      const match = /language-(\w+)/.exec(className || "");
+      if (!inline && match && match[1] === "mermaid") {
+        return <Mermaid chart={String(children).replace(/\n$/, "")} />;
+      }
       if (inline) {
         return (
           <code style={{

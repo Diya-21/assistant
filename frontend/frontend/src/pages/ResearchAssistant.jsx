@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { researchTopic, searchPapers } from "../api/backend";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -18,11 +18,16 @@ export default function ResearchAssistant() {
 
 
     // Persist page state on changes
+    const isFirstRender = useRef(true);
     useEffect(() => {
+        if (isFirstRender.current) {
+            isFirstRender.current = false;
+            return;
+        }
         if (research || topic) {
             savePageState("research", { topic, research, papers, activeTab });
         }
-    }, [topic, research, papers, activeTab]);
+    }, [topic, research, papers, activeTab, savePageState]);
 
 
     const handleResearch = async () => {

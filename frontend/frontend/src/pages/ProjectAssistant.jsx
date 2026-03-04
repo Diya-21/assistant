@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { getProjectIdeas, getProjectDetail } from "../api/backend";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -22,11 +22,16 @@ export default function ProjectAssistant() {
 
 
     // Persist page state on changes
+    const isFirstRender = useRef(true);
     useEffect(() => {
-        if (projects.length > 0 || subjects) {
+        if (isFirstRender.current) {
+            isFirstRender.current = false;
+            return;
+        }
+        if (projects.length > 0 || subjects || selectedProject) {
             savePageState("projects", { subjects, projects, selectedProject, projectDetail, projectChat });
         }
-    }, [subjects, projects, selectedProject, projectDetail, projectChat]);
+    }, [subjects, projects, selectedProject, projectDetail, projectChat, savePageState]);
 
 
     const handleGetIdeas = async () => {
@@ -151,60 +156,70 @@ export default function ProjectAssistant() {
             {error && <div style={styles.error}>{error}</div>}
 
 
-            {/* Projects Grid with Selection Prompt */}
+            {/* Selection UI */}
             {projects.length > 0 && !selectedProject && (
                 <div style={styles.projectsSection}>
                     <div style={styles.selectionPrompt}>
-                        <div style={styles.selectionIcon}>🎯</div>
-                        <h2 style={styles.sectionTitle}>Choose a Project to Continue With</h2>
-                        <p style={{ color: "#64748b", margin: "0", fontSize: "1rem" }}>
-                            We found {projects.length} project ideas based on your subjects. Select one to get a detailed breakdown, roadmap, and technical concepts.
-                        </p>
+                        <div style={styles.selectionBadge}>STEP 2</div>
+                        <h2 style={styles.sectionTitle}>Select a project to build</h2>
+                        <p style={styles.sectionSubtitle}>Choose the idea that excites you most to see the roadmap and required concepts.</p>
                     </div>
                     <div style={styles.projectsGrid}>
-                        {projects.map((project, index) => (
-                            <div
-                                key={index}
-                                className="project-card"
-                                style={{ position: "relative" }}
-                            >
-                                <div style={styles.cardHeader}>
-                                    <span style={styles.projectNumber}>#{index + 1}</span>
-                                    <span style={{
-                                        ...styles.difficultyTag,
-                                        background: getDifficultyColor(project.difficulty)
-                                    }}>
-                                        {project.difficulty || "Medium"}
-                                    </span>
-                                </div>
-                                <h3 style={styles.projectTitle}>{project.title || "Untitled Project"}</h3>
-                                <p style={styles.projectDesc}>{project.description || ""}</p>
-                                <div style={styles.subjects}>
-                                    {(project.subjects || project.subjects_used || []).map((subject, i) => (
-                                        <span key={i} style={styles.subjectTag}>{subject}</span>
-                                    ))}
-                                </div>
-                                {(project.innovation || project.innovation_factor) && (
-                                    <div style={styles.innovation}>
-                                        💡 {project.innovation || project.innovation_factor}
-                                    </div>
-                                )}
-                                <button
-                                    onClick={() => handleSelectProject(project)}
-                                    style={styles.continueBtn}
-                                    onMouseEnter={(e) => {
-                                        e.target.style.transform = "translateY(-2px)";
-                                        e.target.style.boxShadow = "0 6px 20px rgba(102, 126, 234, 0.4)";
-                                    }}
-                                    onMouseLeave={(e) => {
-                                        e.target.style.transform = "translateY(0)";
-                                        e.target.style.boxShadow = "0 4px 12px rgba(102, 126, 234, 0.25)";
-                                    }}
+                        {projects.map((project, index) => {
+                            const diffColor = project.difficulty?.toLowerCase() === "hard" ? "#ef4444" : project.difficulty?.toLowerCase() === "medium" ? "#f59e0b" : "#10b981";
+                            return (
+                                <div
+                                    key={project.id || index}
+                                    style={styles.projectCard}
+                                    onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-6px)"; e.currentTarget.style.boxShadow = "0 16px 40px rgba(102,126,234,0.18)"; e.currentTarget.style.borderColor = "#667eea"; }}
+                                    onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 4px 20px rgba(0,0,0,0.06)"; e.currentTarget.style.borderColor = "transparent"; }}
                                 >
-                                    Continue with this →
-                                </button>
-                            </div>
-                        ))}
+                                    {/* Card Top Row */}
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                                        <div style={{ width: "42px", height: "42px", borderRadius: "12px", background: "linear-gradient(135deg, #667eea, #764ba2)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: "800", fontSize: "1.1rem" }}>
+                                            #{index + 1}
+                                        </div>
+                                        <span style={{ padding: "5px 14px", borderRadius: "20px", fontSize: "0.78rem", fontWeight: "700", background: `${diffColor}15`, color: diffColor, border: `1px solid ${diffColor}30` }}>
+                                            {project.difficulty || "Medium"}
+                                        </span>
+                                    </div>
+
+                                    {/* Title */}
+                                    <h3 style={{ fontSize: "1.2rem", fontWeight: "700", color: "#1e293b", margin: "0 0 10px 0", lineHeight: "1.4" }}>
+                                        {project.title}
+                                    </h3>
+
+                                    {/* Description */}
+                                    <p style={{ fontSize: "0.92rem", color: "#64748b", lineHeight: "1.65", margin: "0 0 16px 0" }}>
+                                        {project.description}
+                                    </p>
+
+                                    {/* Innovation */}
+                                    {project.innovation && (
+                                        <div style={{ fontSize: "0.85rem", color: "#0f766e", background: "#f0fdfa", padding: "10px 14px", borderRadius: "10px", marginBottom: "14px", borderLeft: "3px solid #14b8a6" }}>
+                                            <strong>💡 Innovation:</strong> {project.innovation}
+                                        </div>
+                                    )}
+
+                                    {/* Subject Tags */}
+                                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "18px" }}>
+                                        {(Array.isArray(project.subjects_used) ? project.subjects_used : [project.subjects_used]).filter(Boolean).map((s, i) => (
+                                            <span key={i} style={styles.subjectTag}>{s}</span>
+                                        ))}
+                                    </div>
+
+                                    {/* Select Button */}
+                                    <button
+                                        onClick={() => handleSelectProject(project)}
+                                        style={styles.cardSelectBtn}
+                                        onMouseEnter={e => { e.target.style.transform = "translateY(-2px)"; e.target.style.boxShadow = "0 6px 20px rgba(102,126,234,0.35)"; }}
+                                        onMouseLeave={e => { e.target.style.transform = "translateY(0)"; e.target.style.boxShadow = "0 4px 12px rgba(102,126,234,0.2)"; }}
+                                    >
+                                        🚀 Build this project →
+                                    </button>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             )}
@@ -317,29 +332,33 @@ const styles = {
     },
     selectionPrompt: {
         textAlign: "center",
-        marginBottom: "30px",
-        padding: "20px",
-        background: "linear-gradient(135deg, #f0f4ff, #e8ecff)",
-        borderRadius: "16px",
-        border: "2px dashed #667eea",
+        marginBottom: "40px",
+        padding: "30px",
+        background: "white",
+        borderRadius: "20px",
+        boxShadow: "0 10px 30px rgba(0,0,0,0.05)",
+        border: "1px solid #eef2ff",
     },
-    selectionIcon: {
-        fontSize: "2.5rem",
-        marginBottom: "8px",
-    },
-    continueBtn: {
-        width: "100%",
-        marginTop: "16px",
-        padding: "12px 20px",
-        background: "linear-gradient(135deg, #667eea, #764ba2)",
+    selectionBadge: {
+        display: "inline-block",
+        padding: "6px 16px",
+        background: "linear-gradient(135deg, #6366f1, #4f46e5)",
         color: "white",
-        border: "none",
-        borderRadius: "10px",
-        fontSize: "0.95rem",
-        fontWeight: "600",
-        cursor: "pointer",
-        transition: "all 0.2s ease",
-        boxShadow: "0 4px 12px rgba(102, 126, 234, 0.25)",
+        borderRadius: "20px",
+        fontSize: "0.8rem",
+        fontWeight: "800",
+        marginBottom: "12px",
+    },
+    sectionTitle: {
+        fontSize: "1.8rem",
+        fontWeight: "800",
+        margin: "0 0 8px 0",
+        color: "#1e293b",
+    },
+    sectionSubtitle: {
+        color: "#64748b",
+        fontSize: "1rem",
+        margin: 0,
     },
     backBtn: {
         padding: "10px 20px",
@@ -417,12 +436,6 @@ const styles = {
     projectsSection: {
         marginBottom: "40px",
     },
-    sectionTitle: {
-        fontSize: "1.5rem",
-        fontWeight: "700",
-        marginBottom: "20px",
-        color: "#1f2937",
-    },
     projectsGrid: {
         display: "grid",
         gridTemplateColumns: "repeat(auto-fill, minmax(350px, 1fr))",
@@ -430,12 +443,28 @@ const styles = {
     },
     projectCard: {
         background: "white",
-        padding: "24px",
-        borderRadius: "16px",
+        padding: "28px",
+        borderRadius: "18px",
         boxShadow: "0 4px 20px rgba(0,0,0,0.06)",
         cursor: "pointer",
-        transition: "transform 0.2s, box-shadow 0.2s",
+        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
         border: "2px solid transparent",
+        display: "flex",
+        flexDirection: "column",
+    },
+    cardSelectBtn: {
+        width: "100%",
+        marginTop: "auto",
+        padding: "13px 20px",
+        background: "linear-gradient(135deg, #667eea, #764ba2)",
+        color: "white",
+        border: "none",
+        borderRadius: "12px",
+        fontSize: "0.95rem",
+        fontWeight: "700",
+        cursor: "pointer",
+        transition: "all 0.2s ease",
+        boxShadow: "0 4px 12px rgba(102, 126, 234, 0.2)",
     },
     projectCardSelected: {
         borderColor: "#667eea",
