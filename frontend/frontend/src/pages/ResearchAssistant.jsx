@@ -18,14 +18,11 @@ export default function ResearchAssistant() {
 
 
     // Persist page state on changes
-    const isFirstRender = useRef(true);
     useEffect(() => {
-        if (isFirstRender.current) {
-            isFirstRender.current = false;
-            return;
-        }
         if (research || topic) {
-            savePageState("research", { topic, research, papers, activeTab });
+            // Truncate long content for safety
+            const trimmedResearch = research?.content ? { ...research, content: research.content.substring(0, 5000) } : research;
+            savePageState("research", { topic, research: trimmedResearch, papers, activeTab });
         }
     }, [topic, research, papers, activeTab, savePageState]);
 

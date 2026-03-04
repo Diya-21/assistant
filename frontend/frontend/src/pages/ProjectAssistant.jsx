@@ -22,14 +22,11 @@ export default function ProjectAssistant() {
 
 
     // Persist page state on changes
-    const isFirstRender = useRef(true);
     useEffect(() => {
-        if (isFirstRender.current) {
-            isFirstRender.current = false;
-            return;
-        }
         if (projects.length > 0 || subjects || selectedProject) {
-            savePageState("projects", { subjects, projects, selectedProject, projectDetail, projectChat });
+            // Truncate long content to prevent sessionStorage quota issues
+            const trimmedDetail = projectDetail?.content ? { ...projectDetail, content: projectDetail.content.substring(0, 5000) } : projectDetail;
+            savePageState("projects", { subjects, projects, selectedProject, projectDetail: trimmedDetail, projectChat });
         }
     }, [subjects, projects, selectedProject, projectDetail, projectChat, savePageState]);
 
@@ -51,10 +48,16 @@ export default function ProjectAssistant() {
             } else if (result.projects && result.projects.length > 0) {
                 setProjects(result.projects);
             } else if (result.content) {
-                // Fallback if JSON parsing failed on backend but we got content
-                setProjectDetail({ content: result.content });
-                // We also set a dummy project to trigger the detail panel visibility
-                setSelectedProject({ title: "Generated Projects (Markdown)", id: "txt" });
+                // If it's a fallback markdown, we still want to show a "card" but it will be a special one
+                setProjects([{
+                    id: "text-report",
+                    title: "Generated Project Ideas (Report)",
+                    description: "The AI was very descriptive! Click here to view the full list of ideas formatted as a report.",
+                    difficulty: "Mixed",
+                    innovation: "Custom Curated",
+                    subjects_used: subjects.split(","),
+                    isReport: true
+                }]);
             } else {
                 setError("No projects were generated. Please try again with different subjects.");
             }
@@ -133,12 +136,12 @@ export default function ProjectAssistant() {
             {/* Input Section */}
             <div style={styles.inputSection}>
                 <div style={styles.inputGroup}>
-                    <label style={styles.label}>Enter your subject or topic</label>
+                    <label style={styles.label}>Enter your subjects or topics</label>
                     <input
                         type="text"
                         value={subjects}
                         onChange={(e) => setSubjects(e.target.value)}
-                        placeholder="e.g., Machine Learning, AAI, Data Structures"
+                        placeholder="e.g., Computer Networks, Neural Networks, IoT"
                         style={styles.input}
                         onKeyPress={(e) => e.key === "Enter" && handleGetIdeas()}
                     />
@@ -146,14 +149,46 @@ export default function ProjectAssistant() {
                 <button
                     onClick={handleGetIdeas}
                     disabled={loading || !subjects.trim()}
-                    style={styles.primaryBtn}
+                    style={{
+                        ...styles.primaryBtn,
+                        opacity: loading || !subjects.trim() ? 0.7 : 1,
+                        cursor: loading || !subjects.trim() ? "not-allowed" : "pointer"
+                    }}
                 >
-                    {loading ? "⏳ Generating..." : "🚀 Generate Project Ideas"}
+                    {loading ? "⏳ Generating Creative Ideas..." : "🚀 Generate Project Ideas"}
                 </button>
             </div>
 
+            {/* Loading State */}
+            {loading && !projects.length && !selectedProject && (
+                <div style={styles.projectsSection}>
+                    <div style={styles.projectsGrid}>
+                        {[1, 2, 3].map(i => (
+                            <div key={i} style={{ ...styles.projectCard, opacity: 0.6, cursor: "wait" }}>
+                                <div style={{ height: "40px", width: "40px", borderRadius: "10px", background: "#f1f5f9", marginBottom: "16px" }}></div>
+                                <div style={{ height: "24px", width: "70%", background: "#f1f5f9", borderRadius: "4px", marginBottom: "12px" }}></div>
+                                <div style={{ height: "16px", width: "100%", background: "#f8fafc", borderRadius: "4px", marginBottom: "8px" }}></div>
+                                <div style={{ height: "16px", width: "90%", background: "#f8fafc", borderRadius: "4px", marginBottom: "16px" }}></div>
+                                <div style={{ height: "36px", width: "100%", background: "#f1f5f9", borderRadius: "8px", marginTop: "auto" }}></div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {/* Error Display */}
             {error && <div style={styles.error}>{error}</div>}
+
+            {/* Empty State */}
+            {!loading && !projects.length && !error && (
+                <div style={{ textAlign: "center", padding: "60px 20px", background: "white", borderRadius: "20px", boxShadow: "0 4px 20px rgba(0,0,0,0.04)" }}>
+                    <div style={{ fontSize: "3.5rem", marginBottom: "16px" }}>💡</div>
+                    <h3 style={{ fontSize: "1.4rem", fontWeight: "700", color: "#1e293b", marginBottom: "8px" }}>Your Project Journey Starts Here</h3>
+                    <p style={{ color: "#64748b", maxWidth: "450px", margin: "0 auto" }}>
+                        Enter the subjects you're interested in (e.g., "AI, Python, Web Dev") and our AI will curate personalized project ideas aligned with your syllabus.
+                    </p>
+                </div>
+            )}
 
 
             {/* Selection UI */}
@@ -438,19 +473,21 @@ const styles = {
     },
     projectsGrid: {
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(350px, 1fr))",
-        gap: "20px",
+        gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+        gap: "24px",
     },
     projectCard: {
         background: "white",
         padding: "28px",
-        borderRadius: "18px",
+        borderRadius: "20px",
         boxShadow: "0 4px 20px rgba(0,0,0,0.06)",
         cursor: "pointer",
         transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
         border: "2px solid transparent",
         display: "flex",
         flexDirection: "column",
+        height: "100%",
+        boxSizing: "border-box",
     },
     cardSelectBtn: {
         width: "100%",

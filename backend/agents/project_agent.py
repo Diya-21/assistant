@@ -107,16 +107,27 @@ Focus on foundational understanding, not code.
     
     def _clean_json(self, raw_text: str) -> str:
         """Extract and clean JSON from LLM response more robustly"""
-        # Remove markdown code blocks if present
+        # Remove markdown code blocks
         raw_text = re.sub(r'```json\s*', '', raw_text)
         raw_text = re.sub(r'```\s*', '', raw_text)
         
-        # Find the first { and last }
-        first_idx = raw_text.find('{')
-        last_idx = raw_text.rfind('}')
+        # Find the first and last JSON delimiters
+        # We look for both '{' and '[' to handle object or array responses
+        braces_start = raw_text.find('{')
+        bracket_start = raw_text.find('[')
         
-        if first_idx != -1 and last_idx != -1:
-            return raw_text[first_idx:last_idx+1]
+        if braces_start == -1 and bracket_start == -1:
+            return raw_text.strip()
+            
+        # Determine the earliest starting point
+        start_idx = braces_start if (braces_start != -1 and (bracket_start == -1 or braces_start < bracket_start)) else bracket_start
+        
+        # Determine the corresponding end point
+        end_char = '}' if start_idx == braces_start else ']'
+        end_idx = raw_text.rfind(end_char)
+        
+        if start_idx != -1 and end_idx != -1:
+            return raw_text[start_idx:end_idx+1]
         
         return raw_text.strip()
     

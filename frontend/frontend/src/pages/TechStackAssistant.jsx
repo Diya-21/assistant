@@ -31,14 +31,11 @@ export default function TechStackAssistant() {
     const [technology, setTechnology] = useState(cached?.technology || "");
 
     // Persist page state on changes
-    const isFirstRender = useRef(true);
     useEffect(() => {
-        if (isFirstRender.current) {
-            isFirstRender.current = false;
-            return;
-        }
         if (result || projectType || tech1 || concept || task) {
-            savePageState("techStack", { activeMode, result, projectType, requirements, tech1, tech2, compareContext, concept, task, technology });
+            // Truncate long content for safety
+            const trimmedResult = result?.content ? { ...result, content: result.content.substring(0, 5000) } : result;
+            savePageState("techStack", { activeMode, result: trimmedResult, projectType, requirements, tech1, tech2, compareContext, concept, task, technology });
         }
     }, [activeMode, result, projectType, requirements, tech1, tech2, compareContext, concept, task, technology, savePageState]);
 

@@ -154,7 +154,6 @@ export default function Dashboard() {
 
                     {/* Main Content Grid */}
                     <div style={styles.contentGrid}>
-                        {/* Recent Topics */}
                         <div style={styles.card}>
                             <h3 style={styles.cardTitle}>📖 Recent Topics</h3>
                             {Object.entries(topics).length > 0 ? (
@@ -195,30 +194,30 @@ export default function Dashboard() {
                             </button>
                         </div>
 
-                        {/* Achievements */}
+                        {/* Project Hub (Replaced Achievements) */}
                         <div style={styles.card}>
-                            <h3 style={styles.cardTitle}>🏆 Achievements</h3>
-                            {achievements.length > 0 ? (
-                                <div style={styles.achievementsList}>
-                                    {achievements.map((id) => {
-                                        const info = getAchievementInfo(id);
-                                        return (
-                                            <div key={id} style={styles.achievementItem}>
-                                                <span style={styles.achievementIcon}>{info.icon}</span>
-                                                <div>
-                                                    <strong>{info.title}</strong>
-                                                    <p style={styles.achievementDesc}>{info.desc}</p>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            ) : (
-                                <div style={styles.noAchievements}>
-                                    <span style={{ fontSize: "2.5rem" }}>🔒</span>
-                                    <p>Keep learning to unlock achievements!</p>
-                                </div>
-                            )}
+                            <h3 style={styles.cardTitle}>💡 Project Hub</h3>
+                            <div style={{ textAlign: "center", padding: "20px 0" }}>
+                                <div style={{ fontSize: "2.5rem", marginBottom: "12px" }}>🚀</div>
+                                <p style={{ color: "#4b5563", fontSize: "0.95rem", marginBottom: "16px" }}>
+                                    Need a project topic? Get ideas based on your syllabus topics immediately.
+                                </p>
+                                <button
+                                    onClick={() => navigate("/projects")}
+                                    style={{
+                                        padding: "10px 20px",
+                                        background: "linear-gradient(135deg, #667eea, #764ba2)",
+                                        color: "white",
+                                        border: "none",
+                                        borderRadius: "10px",
+                                        fontWeight: "600",
+                                        cursor: "pointer",
+                                        width: "100%"
+                                    }}
+                                >
+                                    Explore Project Ideas
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -239,8 +238,9 @@ export default function Dashboard() {
                         </div>
                     </div>
                 </div>
-            )}
-        </div>
+            )
+            }
+        </div >
     );
 }
 
