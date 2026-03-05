@@ -228,8 +228,34 @@ Context:
             
             if not projects:
                 # If still no projects, maybe it's just a raw list of dicts that got wrapped or something
-                if isinstance(projects_data, dict) and "id" in projects_data:
+                if isinstance(projects_data, dict) and any(k in projects_data for k in ["title", "name", "id"]):
                     projects = [projects_data]
+            
+            # --- NEW: Normalize and Filter ---
+            normalized_projects = []
+            for p in projects:
+                if not isinstance(p, dict): continue
+                
+                # Extract with fallbacks for common alternative keys
+                title = p.get("title") or p.get("name") or p.get("project_name")
+                desc = p.get("description") or p.get("desc") or p.get("summary")
+                difficulty = p.get("difficulty") or p.get("level") or "Medium"
+                subjects = p.get("subjects_used") or p.get("topics") or []
+                innov = p.get("innovation") or p.get("innovation_factor") or p.get("unique_selling_point", "")
+                
+                # Only keep if we at least have a title or description
+                if title or desc:
+                    normalized_projects.append({
+                        "id": p.get("id") or f"proj-{len(normalized_projects)}",
+                        "title": title or "Innovative Project Idea",
+                        "description": desc or "No description provided.",
+                        "subjects_used": subjects if isinstance(subjects, list) else [subjects],
+                        "difficulty": str(difficulty).capitalize(),
+                        "innovation": innov
+                    })
+            
+            projects = normalized_projects
+            # --------------------------------
 
             reasoning_trace.append(f"✅ Generated {len(projects)} project ideas")
             

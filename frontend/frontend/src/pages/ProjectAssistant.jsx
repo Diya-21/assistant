@@ -46,7 +46,8 @@ export default function ProjectAssistant() {
             if (result.stage === "ERROR") {
                 setError(result.content);
             } else if (result.projects && result.projects.length > 0) {
-                setProjects(result.projects);
+                const validProjects = result.projects.filter(p => p && (p.title || p.description));
+                setProjects(validProjects);
             } else if (result.content) {
                 // If it's a fallback markdown, we still want to show a "card" but it will be a special one
                 setProjects([{
@@ -221,12 +222,12 @@ export default function ProjectAssistant() {
 
                                     {/* Title */}
                                     <h3 style={{ fontSize: "1.2rem", fontWeight: "700", color: "#1e293b", margin: "0 0 10px 0", lineHeight: "1.4" }}>
-                                        {project.title}
+                                        {project.title || "Project Idea"}
                                     </h3>
 
                                     {/* Description */}
                                     <p style={{ fontSize: "0.92rem", color: "#64748b", lineHeight: "1.65", margin: "0 0 16px 0" }}>
-                                        {project.description}
+                                        {project.description || "Click 'Build this project' to see details."}
                                     </p>
 
                                     {/* Innovation */}
