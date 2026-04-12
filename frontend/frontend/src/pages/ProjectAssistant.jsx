@@ -83,7 +83,7 @@ export default function ProjectAssistant() {
 
         try {
             const contextStr = newMsgs.map(m => `${m.role === "user" ? "Student" : "Assistant"}: ${m.content}`).join("\n");
-            const data = await followUpChat(projectTitle, userMsg.content, contextStr, "chat");
+            const data = await followUpChat(projectTitle, userMsg.content, contextStr, "chat", false);
 
             const aiMsg = { role: "assistant", content: data.content, timestamp: new Date().toISOString() };
             setProjectChat(prev => ({ ...prev, [projectTitle]: [...newMsgs, aiMsg] }));

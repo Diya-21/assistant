@@ -4,7 +4,7 @@ Uses Agentic RAG for multi-step project planning
 """
 
 from backend.rag.retriever import get_retriever
-from backend.agents.qa_agent import generate_answer, GENERAL_PROMPT
+from backend.agents.qa_agent import generate_answer, GENERAL_PROMPT, OPEN_SOURCE_PROMPT
 from backend.agents.agentic_rag import AgenticRAG
 import json
 import re
@@ -203,7 +203,7 @@ Context:
         raw_response = generate_answer(
             context=context,
             question=prompt,
-            system_prompt=GENERAL_PROMPT
+            system_prompt=OPEN_SOURCE_PROMPT
         )
         
         try:
@@ -322,7 +322,7 @@ Context:
         response = generate_answer(
             context=context,
             question=prompt,
-            system_prompt=GENERAL_PROMPT
+            system_prompt=OPEN_SOURCE_PROMPT
         )
         
         reasoning_trace.append("✅ Response generated")

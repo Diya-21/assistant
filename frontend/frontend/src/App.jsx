@@ -12,6 +12,8 @@ import ProjectAssistant from "./pages/ProjectAssistant";
 import ResearchAssistant from "./pages/ResearchAssistant";
 import TechStackAssistant from "./pages/TechStackAssistant";
 import History from "./pages/History";
+import StudyMaterials from "./pages/StudyMaterials";
+
 
 import "./styles/theme.css";
 import "./styles/layout.css";
@@ -40,6 +42,8 @@ function AppRoutes() {
       <Route path="/research" element={<ProtectedRoute><ResearchAssistant /></ProtectedRoute>} />
       <Route path="/tech-stack" element={<ProtectedRoute><TechStackAssistant /></ProtectedRoute>} />
       <Route path="/history" element={<ProtectedRoute><History /></ProtectedRoute>} />
+      <Route path="/study-materials" element={<ProtectedRoute><StudyMaterials /></ProtectedRoute>} />
+
 
       {/* Default redirect */}
       <Route path="*" element={<Navigate to={isLoggedIn ? "/dashboard" : "/login"} />} />

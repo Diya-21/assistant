@@ -86,6 +86,15 @@ def get_history(user_id: str) -> List[Dict]:
     conn.close()
     return [dict(row) for row in rows]
 
+def reset_db():
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DROP TABLE IF EXISTS history")
+    cursor.execute("DROP TABLE IF EXISTS users")
+    conn.commit()
+    conn.close()
+    init_db()
+
 if __name__ == "__main__":
     init_db()
     print("Database initialized.")

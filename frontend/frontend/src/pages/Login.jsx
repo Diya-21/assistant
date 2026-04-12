@@ -64,8 +64,8 @@ export default function Login() {
 
             <div style={styles.card}>
                 <div style={styles.logoArea}>
-                    <div style={styles.logoIcon}>🎓</div>
-                    <h1 style={styles.title}>Learning Agent</h1>
+                    <div style={styles.logoIcon}>🤖</div>
+                    <h1 style={styles.title}>Multimodal AI TA</h1>
                     <p style={styles.subtitle}>AI-Powered Multimodal Teaching Assistant</p>
                 </div>
 

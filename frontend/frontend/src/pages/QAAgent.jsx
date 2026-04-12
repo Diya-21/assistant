@@ -1,8 +1,16 @@
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { learnTopic, deepResearch, followUpChat, trackProgress } from "../api/backend";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import { useAppContext } from "../context/AppContext";
+import Citations from "../components/Citations";
+import BloomsBadge from "../components/BloomsBadge";
+import SyllabusVerification from "../components/SyllabusVerification";
+import KnowledgeSuggestions from "../components/KnowledgeSuggestions";
 import mermaid from "mermaid";
 
 mermaid.initialize({
@@ -32,12 +40,12 @@ const Mermaid = ({ chart }) => {
 
 export default function QAAgent() {
   const { savePageState, getPageState, syllabusUploaded, syllabusName } = useAppContext();
+  const [searchParams] = useSearchParams();
   const cached = getPageState("theory");
 
   const [messages, setMessages] = useState(cached?.messages || []);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [useDeepResearch, setUseDeepResearch] = useState(false);
   const [history, setHistory] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
   const [currentTopic, setCurrentTopic] = useState(cached?.currentTopic || "");
@@ -49,6 +57,10 @@ export default function QAAgent() {
   // Multimodal states
   const [isRecording, setIsRecording] = useState(false);
   const [uploadedFile, setUploadedFile] = useState(null);
+  const [reasoningTrace, setReasoningTrace] = useState([]);
+
+
+
 
   const chatEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -88,13 +100,12 @@ export default function QAAgent() {
   useEffect(() => { inputRef.current?.focus(); }, []);
 
 
-  async function handleSend(customMsg = null, isDeep = null) {
+  async function handleSend(customMsg = null) {
     const userMsg = customMsg || input.trim();
     if (!userMsg && !uploadedFile) return;
 
     setInput("");
     setLoading(true);
-    const deepToUse = isDeep !== null ? isDeep : useDeepResearch;
 
     const newUserMsg = {
       role: "user",
@@ -107,14 +118,14 @@ export default function QAAgent() {
     const newMessages = [...messages, newUserMsg];
     setMessages(newMessages);
 
+    setLoading(true);
+    setReasoningTrace([]);
     try {
+
       let data;
       if (isFollowUp) {
         const contextStr = messages.map(m => `${m.role === "user" ? "Student" : "AI"}: ${m.content.substring(0, 300)}`).join("\n");
         data = await followUpChat(currentTopic || userMsg, userMsg, contextStr, "chat");
-      } else if (deepToUse) {
-        setCurrentTopic(userMsg);
-        data = await deepResearch(userMsg);
       } else {
         setCurrentTopic(userMsg);
         data = await learnTopic(userMsg, "explain");
@@ -122,25 +133,32 @@ export default function QAAgent() {
 
       const assistantMsg = {
         role: "assistant",
-        content: data.content || "No response received.",
+        content: data.content || data.answer || "No response received.",
         timestamp: new Date().toISOString(),
+        citations: data.citations || [],
+        blooms: data.blooms || null,
+        syllabus_verification: data.syllabus_verification || null,
         meta: (data.stage === "DEEP_RESEARCH" && data.reasoning_trace) ? {
           type: "deep_research",
           iterations: data.iterations,
           sources: data.sources_used,
           subQueries: data.sub_queries,
           trace: data.reasoning_trace
-        } : null
+        } : null,
+        suggestions: data.suggestions || [],
+        stage: data.stage
       };
 
       setMessages([...newMessages, assistantMsg]);
+      setReasoningTrace(data.reasoning_trace || []);
+
 
       // Save to history on first message
       if (!isFollowUp) {
         const entry = {
           id: Date.now(),
           topic: userMsg || (uploadedFile ? uploadedFile.name : "Untitled"),
-          type: deepToUse ? "deep_research" : "learn",
+          type: "learn",
           timestamp: new Date().toISOString(),
           messages: [...newMessages, assistantMsg]
         };
@@ -160,11 +178,13 @@ export default function QAAgent() {
     if (loading) return;
     const labels = { summary: "📝 Generate Summary", diagram: "📊 Generate Diagram", agentic: "🧠 Deep Research", videos: "🎥 Video Resources", quiz: "📝 Take Quiz" };
     setLoading(true);
+    setReasoningTrace([]);
     const actionMsg = { role: "user", content: labels[mode] || mode, timestamp: new Date().toISOString(), isAction: true };
     const newMsgs = [...messages, actionMsg];
     setMessages(newMsgs);
 
     try {
+
       const contextStr = messages.map(m => `${m.role === "user" ? "Student" : "AI"}: ${m.content.substring(0, 300)}`).join("\n");
       const data = await followUpChat(currentTopic || "this topic", labels[mode], contextStr, mode);
 
@@ -175,7 +195,15 @@ export default function QAAgent() {
         meta = { type: "quiz", questions: data.questions };
       }
 
-      setMessages([...newMsgs, { role: "assistant", content: data.content || (data.stage === "QUIZ" ? "Got it! Here is a quiz for you:" : ""), timestamp: new Date().toISOString(), meta }]);
+      setMessages([...newMsgs, {
+        role: "assistant",
+        content: data.content || (data.stage === "QUIZ" ? "Got it! Here is a quiz for you:" : ""),
+        timestamp: new Date().toISOString(),
+        citations: data.citations || [],
+        meta
+      }]);
+      setReasoningTrace(data.reasoning_trace || []);
+
     } catch (err) { console.error(err); }
     finally { setLoading(false); inputRef.current?.focus(); }
   }
@@ -250,6 +278,7 @@ export default function QAAgent() {
     }
   }
 
+
   return (
     <div style={styles.page}>
       {/* Sidebar */}
@@ -274,10 +303,11 @@ export default function QAAgent() {
         <div style={styles.topBar}>
           <div style={styles.topBarLeft}><button onClick={() => setShowHistory(true)} style={styles.menuBtn}>☰</button><h2 style={styles.topBarTitle}>📚 Learning Agent</h2></div>
           <div style={styles.topBarRight}>
-            <div onClick={() => setUseDeepResearch(!useDeepResearch)} style={{ ...styles.deepToggle, background: useDeepResearch ? "linear-gradient(135deg, #667eea, #764ba2)" : "#e5e7eb" }}>
-              <div style={{ ...styles.deepToggleKnob, transform: useDeepResearch ? "translateX(24px)" : "translateX(0)" }} />
-            </div>
-            <span style={{ ...styles.deepToggleLabel, color: useDeepResearch ? "#667eea" : "#9ca3af" }}>🧠 Deep Research</span>
+            {syllabusUploaded && (
+              <div style={styles.syllabusBadge}>
+                <span style={{ fontSize: "0.8rem", color: "#059669" }}>●</span> Active Syllabus: <strong>{syllabusName}</strong>
+              </div>
+            )}
             <button onClick={startNewChat} style={styles.newChatBtn}>+ New Chat</button>
           </div>
         </div>
@@ -294,7 +324,7 @@ export default function QAAgent() {
               </div>
               <div style={styles.suggestions}>
                 {["Explain CNNs", "How does Kafka work?", "Syllabus Overview"].map(s => (
-                  <button key={s} style={styles.suggestionBtn} onClick={() => setInput(s)}>{s}</button>
+                  <button key={s} style={styles.suggestionBtn} onClick={() => handleSend(s)}>{s}</button>
                 ))}
               </div>
             </div>
@@ -312,9 +342,21 @@ export default function QAAgent() {
                       </div>
                     )}
 
-                    <div className="msg-content" style={styles.msgContent}>
+
+
+                    {msg.stage === "NUMERICALS" && (
+                      <div style={styles.numericalBadge}>🧮 Solved Numerical</div>
+                    )}
+
+                    {/* Syllabus source info is now integrated into the response text or available via toggle */}
+
+                    <div className="msg-content" style={{
+                      ...styles.msgContent,
+                      ...(msg.stage === "NUMERICALS" ? styles.numericalContent : {})
+                    }}>
                       <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        rehypePlugins={[rehypeKatex]}
                         components={{
                           a: ({ node, children, href, ...props }) => (
                             <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "#667eea", fontWeight: 600 }} {...props}>
@@ -346,6 +388,17 @@ export default function QAAgent() {
                       </ReactMarkdown>
                     </div>
 
+                    {msg.role === "assistant" && !msg.isAction && msg.stage !== "QUIZ" && (
+                      <div style={styles.actionBar}>
+                        <button onClick={() => handleQuickAction("summary")} style={styles.actionBtn}>📝 Summary</button>
+                        <button onClick={() => handleQuickAction("quiz")} style={styles.actionBtn}>📝 Quiz</button>
+                        <button onClick={() => handleQuickAction("diagram")} style={styles.actionBtn}>📊 Diagram</button>
+                        <button onClick={() => handleQuickAction("videos")} style={styles.actionBtn}>🎥 Videos</button>
+                        <button onClick={() => handleQuickAction("agentic")} style={styles.actionBtn}>🧠 Deep Research</button>
+                      </div>
+                    )}
+
+
                     {msg.meta?.type === "quiz" && (
                       <div style={styles.quizInThread}>
                         {msg.meta.questions.map((q, qIndex) => (
@@ -361,6 +414,28 @@ export default function QAAgent() {
                             </div>
                           </div>
                         ))}
+                        {msg.role === "assistant" && msg.citations && msg.citations.length > 0 && (
+                          <div style={{ marginTop: "1rem" }}>
+                            <button
+                              onClick={() => {
+                                setMessages(prev => prev.map((m, i) => i === idx ? { ...m, _showCites: !m._showCites } : m));
+                              }}
+                              style={{
+                                background: "none",
+                                border: "1px solid #64748b",
+                                color: "#64748b",
+                                padding: "4px 12px",
+                                borderRadius: "20px",
+                                fontSize: "0.8rem",
+                                cursor: "pointer",
+                                marginBottom: "8px"
+                              }}
+                            >
+                              {msg._showCites ? "📖 Hide Syllabus Citations" : "🔍 View Data Sources"}
+                            </button>
+                            {msg._showCites && <Citations citations={msg.citations} />}
+                          </div>
+                        )}
                         {!quizScores[idx] ? (
                           <button onClick={() => submitThreadQuiz(idx, msg.meta.questions)} style={styles.quizSubmitBtn}>Submit Quiz</button>
                         ) : (
@@ -375,29 +450,38 @@ export default function QAAgent() {
                       </div>
                     )}
 
-                    {msg.role === "assistant" && !loading && (
-                      <div style={styles.actionBar}>
-                        <button onClick={() => handleQuickAction("summary")} className="action-pill">📝 Generate Summary</button>
-                        <button onClick={() => handleQuickAction("diagram")} className="action-pill">📊 Generate Diagram</button>
-                        <button onClick={() => handleQuickAction("videos")} className="action-pill">🎥 Video Resources</button>
-                        <button onClick={() => handleQuickAction("quiz")} className="action-pill">📝 Take Quiz</button>
-                      </div>
-                    )}
 
-                    {msg.role === "assistant" && !loading && idx === (messages.length - 1) && (
-                      <div style={styles.nextSteps}>
-                        <p style={styles.nextStepsTitle}>🚀 Master this topic further:</p>
-                        <div style={styles.tabGrid}>
-                          <div style={styles.tabBadge}>🧪 Labs</div>
-                          <div style={styles.tabBadge}>🏗️ Projects</div>
-                          <div style={styles.tabBadge}>🛠️ Tech Stack</div>
-                        </div>
+
+                  </div>
+                </div>
+              ))}
+              {/* ✨ AI Reasoning Console ✨ */}
+              {(loading || (reasoningTrace && reasoningTrace.length > 0)) && (
+                <div className="thinking-console" style={{ margin: "20px" }}>
+                  <div className="thinking-console-header">
+                    <span style={{ display: "flex", alignItems: "center" }}>
+                      {loading && <span className="thinking-loader"></span>}
+                      AI LEARNING STRATEGY & SYLLABUS EXTRACTION LOG
+                    </span>
+                    <span>{loading ? "Agent Active" : "Trace Stored"}</span>
+                  </div>
+
+                  <div style={{ padding: "0.5rem 0" }}>
+                    {reasoningTrace.map((step, idx) => (
+                      <div key={idx} className="trace-step">
+                        <span className="trace-icon">›</span>
+                        <span className="trace-text">{step}</span>
+                      </div>
+                    ))}
+                    {loading && reasoningTrace.length === 0 && (
+                      <div className="trace-step">
+                        <span className="trace-icon">›</span>
+                        <span className="trace-text animate-pulse">Initializing Agentic retrieval...</span>
                       </div>
                     )}
                   </div>
                 </div>
-              ))}
-              {loading && <div style={styles.messageRow}><div style={{ ...styles.messageBubble, ...styles.assistantBubble }}>Thinking...</div></div>}
+              )}
               <div ref={chatEndRef} />
             </div>
           )}
@@ -405,11 +489,16 @@ export default function QAAgent() {
 
         <div style={styles.inputBar}>
           {uploadedFile && <div style={styles.fileLabel}>📎 {uploadedFile.name} <button onClick={() => setUploadedFile(null)}>✕</button></div>}
+          <div style={{ display: "flex", gap: "10px", marginBottom: "12px", maxWidth: "900px", margin: "0 auto 12px" }}>
+            {/* Direct reasoning and syllabus governance are now automatically applied */}
+          </div>
           <div style={styles.inputFlex}>
             <button onClick={() => fileInputRef.current.click()} style={{ ...styles.iconBtn, fontSize: "1.4rem" }}>📎</button>
             <input type="file" ref={fileInputRef} onChange={handleFileUpload} style={{ display: "none" }} />
-            <button onClick={toggleSpeech} style={{ ...styles.iconBtn, color: isRecording ? "red" : "#6b7280" }}>{isRecording ? "🔴" : "🎙️"}</button>
-            <input ref={inputRef} style={styles.chatInput} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSend()} placeholder="Ask a follow-up or try a quick action..." />
+            <button onClick={toggleSpeech} style={{ ...styles.iconBtn, color: isRecording ? "#ef4444" : "#64748b" }}>
+              {isRecording ? "🔴" : "🎤"}
+            </button>
+            <input ref={inputRef} style={styles.chatInput} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSend()} placeholder="Ask a follow-up or try a numerical..." />
             <button onClick={() => handleSend()} style={styles.circleSend}>➤</button>
           </div>
         </div>
@@ -440,6 +529,7 @@ const styles = {
   deepToggleKnob: { position: "absolute", top: "2px", left: "2px", width: "20px", height: "20px", borderRadius: "50%", background: "white", transition: "transform 0.2s ease" },
   deepToggleLabel: { fontSize: "0.9rem", fontWeight: "700" },
   newChatBtn: { padding: "8px 16px", borderRadius: "10px", background: "linear-gradient(135deg, #6366f1, #4f46e5)", color: "white", border: "none", cursor: "pointer", fontWeight: "600" },
+  numericalBtn: { padding: "8px 16px", borderRadius: "10px", background: "linear-gradient(135deg, #f59e0b, #d97706)", color: "white", border: "none", cursor: "pointer", fontWeight: "600", fontSize: "0.85rem" },
   chatArea: { flex: 1, overflowY: "auto", padding: "24px" },
   welcome: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", textAlign: "center", color: "#475569" },
   welcomeIcon: { fontSize: "4rem", marginBottom: "20px" },
@@ -457,6 +547,24 @@ const styles = {
   assistantBubble: { background: "white", color: "#1e293b", border: "1px solid #e2e8f0", borderBottomLeftRadius: "4px" },
   msgHeader: { marginBottom: "8px" },
   msgRole: { fontSize: "0.8rem", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.05em" },
+  numericalBadge: {
+    display: "inline-block",
+    padding: "6px 14px",
+    background: "linear-gradient(135deg, #0f172a, #334155)",
+    color: "white",
+    borderRadius: "10px",
+    fontSize: "0.8rem",
+    fontWeight: "700",
+    marginBottom: "12px",
+    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+  },
+  numericalContent: {
+    background: "#fff",
+    borderLeft: "5px solid #1e293b",
+    padding: "20px",
+    borderRadius: "12px",
+    boxShadow: "inset 0 0 10px rgba(0,0,0,0.02)",
+  },
   msgContent: { fontSize: "1rem", lineHeight: "1.6" },
   metaBar: { display: "flex", gap: "10px", marginBottom: "12px" },
   metaChip: { padding: "4px 10px", background: "#eef2ff", borderRadius: "8px", fontSize: "0.75rem", color: "#4f46e5", fontWeight: "700" },
@@ -479,5 +587,18 @@ const styles = {
   inputFlex: { display: "flex", gap: "12px", alignItems: "center", maxWidth: "900px", margin: "0 auto" },
   iconBtn: { background: "none", border: "none", fontSize: "1.8rem", cursor: "pointer", outline: "none", color: "#64748b" },
   chatInput: { flex: 1, padding: "14px 20px", borderRadius: "15px", border: "2px solid #e2e8f0", fontSize: "1rem", outline: "none", transition: "border-color 0.2s" },
-  circleSend: { width: "48px", height: "48px", borderRadius: "50%", background: "#4f46e5", color: "white", border: "none", fontSize: "1.5rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }
+  circleSend: { width: "48px", height: "48px", borderRadius: "50%", background: "#4f46e5", color: "white", border: "none", fontSize: "1.5rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" },
+  speakBtn: {
+    padding: "8px 16px",
+    borderRadius: "10px",
+    border: "1px solid #6366f1",
+    background: "rgba(99, 102, 241, 0.1)",
+    color: "#4f46e5",
+    cursor: "pointer",
+    fontSize: "0.85rem",
+    fontWeight: "700",
+    display: "flex",
+    alignItems: "center",
+    gap: "6px"
+  }
 };

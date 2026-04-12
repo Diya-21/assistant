@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { researchTopic, searchPapers } from "../api/backend";
+import { researchTopic, searchPapers, followUpChat } from "../api/backend";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAppContext } from "../context/AppContext";
@@ -15,6 +15,9 @@ export default function ResearchAssistant() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [activeTab, setActiveTab] = useState(cached?.activeTab || "explanation");
+    const [chatMessages, setChatMessages] = useState(cached?.chatMessages || []);
+    const [chatInput, setChatInput] = useState("");
+    const [chatLoading, setChatLoading] = useState(false);
 
 
     // Persist page state on changes
@@ -22,9 +25,9 @@ export default function ResearchAssistant() {
         if (research || topic) {
             // Truncate long content for safety
             const trimmedResearch = research?.content ? { ...research, content: research.content.substring(0, 5000) } : research;
-            savePageState("research", { topic, research: trimmedResearch, papers, activeTab });
+            savePageState("research", { topic, research: trimmedResearch, papers, activeTab, chatMessages });
         }
-    }, [topic, research, papers, activeTab, savePageState]);
+    }, [topic, research, papers, activeTab, chatMessages, savePageState]);
 
 
     const handleResearch = async () => {
@@ -64,6 +67,29 @@ export default function ResearchAssistant() {
             setError("Paper search failed.");
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleChat = async () => {
+        if (!chatInput.trim() || !topic) return;
+
+        const userMsg = { role: "user", content: chatInput, timestamp: new Date().toISOString() };
+        const newMsgs = [...chatMessages, userMsg];
+        setChatMessages(newMsgs);
+        setChatInput("");
+        setChatLoading(true);
+
+        try {
+            const contextStr = newMsgs.map(m => `${m.role === "user" ? "Student" : "Assistant"}: ${m.content}`).join("\n");
+            // mode is "chat", strict is false
+            const data = await followUpChat(topic, userMsg.content, contextStr, "chat", false);
+
+            const aiMsg = { role: "assistant", content: data.content, timestamp: new Date().toISOString() };
+            setChatMessages(prev => [...prev, aiMsg]);
+        } catch (err) {
+            setError("Chat failed. Please try again.");
+        } finally {
+            setChatLoading(false);
         }
     };
 
@@ -144,6 +170,7 @@ export default function ResearchAssistant() {
                             { id: "explanation", label: "📖 Explanation", icon: "📖" },
                             { id: "papers", label: `📄 Papers (${papers.length})`, icon: "📄" },
                             { id: "directions", label: "🎯 Research Directions", icon: "🎯" },
+                            { id: "chat", label: "💬 Research Chat", icon: "💬" },
                         ].map((tab) => (
                             <button
                                 key={tab.id}
@@ -214,6 +241,37 @@ export default function ResearchAssistant() {
                         {activeTab === "directions" && (
                             <div className="msg-content" style={styles.markdownContent}>
                                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{research.research_directions}</ReactMarkdown>
+                            </div>
+                        )}
+
+                        {activeTab === "chat" && (
+                            <div style={styles.chatContainer}>
+                                <div style={styles.chatMessages}>
+                                    {chatMessages.length === 0 && (
+                                        <div style={styles.aiBubble}>
+                                            👋 Ask me anything about <strong>{topic}</strong>. I'll use both your syllabus and academic research to answer!
+                                        </div>
+                                    )}
+                                    {chatMessages.map((msg, idx) => (
+                                        <div key={idx} style={{ ...styles.msgBubble, ...(msg.role === "user" ? styles.userBubble : styles.aiBubble) }}>
+                                            <div style={styles.msgRole}>{msg.role === "user" ? "👤 You" : "🤖 Assistant"}</div>
+                                            <div className="msg-content"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
+                                        </div>
+                                    ))}
+                                    {chatLoading && <div style={styles.aiBubble}>...researching</div>}
+                                </div>
+                                <div style={styles.chatInputRow}>
+                                    <input
+                                        style={styles.chatInput}
+                                        value={chatInput}
+                                        onChange={(e) => setChatInput(e.target.value)}
+                                        placeholder="Ask a question about this research..."
+                                        onKeyPress={(e) => e.key === "Enter" && handleChat()}
+                                    />
+                                    <button onClick={handleChat} disabled={chatLoading} style={styles.chatSendBtn}>
+                                        {chatLoading ? "⏳" : "➤"}
+                                    </button>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -443,6 +501,70 @@ const styles = {
         borderRadius: "10px",
         cursor: "pointer",
         fontWeight: "600",
+    },
+    chatContainer: {
+        display: "flex",
+        flexDirection: "column",
+        height: "500px",
+        background: "#f8fafc",
+        borderRadius: "16px",
+        overflow: "hidden",
+        border: "1px solid #e2e8f0",
+    },
+    chatMessages: {
+        flex: 1,
+        overflowY: "auto",
+        padding: "20px",
+        display: "flex",
+        flexDirection: "column",
+        gap: "12px",
+    },
+    msgBubble: {
+        padding: "12px 16px",
+        borderRadius: "12px",
+        maxWidth: "80%",
+        fontSize: "0.95rem",
+        lineHeight: "1.5",
+    },
+    userBubble: {
+        alignSelf: "flex-end",
+        background: "linear-gradient(135deg, #06b6d4, #0891b2)",
+        color: "white",
+    },
+    aiBubble: {
+        alignSelf: "flex-start",
+        background: "white",
+        boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
+        color: "#1f2937",
+    },
+    msgRole: {
+        fontSize: "0.75rem",
+        fontWeight: "700",
+        marginBottom: "4px",
+        opacity: 0.8,
+    },
+    chatInputRow: {
+        padding: "16px 20px",
+        background: "white",
+        borderTop: "1px solid #e5e7eb",
+        display: "flex",
+        gap: "12px",
+    },
+    chatInput: {
+        flex: 1,
+        padding: "12px 16px",
+        border: "1px solid #e5e7eb",
+        borderRadius: "8px",
+        outline: "none",
+    },
+    chatSendBtn: {
+        background: "linear-gradient(135deg, #06b6d4, #0891b2)",
+        color: "white",
+        border: "none",
+        width: "44px",
+        borderRadius: "8px",
+        cursor: "pointer",
+        fontWeight: "700",
     },
 
 };

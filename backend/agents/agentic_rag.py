@@ -70,43 +70,52 @@ Output: ["MapReduce architecture and features", "Apache Spark architecture and f
             # Fallback to original question
             return [question]
     
-    def _retrieve_with_multiple_queries(self, queries: List[str], k: int = 3) -> str:
+    def _retrieve_with_multiple_queries(self, queries: List[str], k: int = 3, target_unit: str = None) -> Dict:
         """
         Retrieve documents using multiple queries and combine them.
-        Falls back to general knowledge if no retriever available.
+        Applies strict filtration as requested per mentor requirements.
+        Returns: {"context": str, "citations": List[Dict]}
         """
+        from backend.utils.syllabus_guard import apply_strict_filtration
+        
         if not self.retriever:
-            # No syllabus uploaded - inform the student
-            return f"No syllabus has been uploaded. The student is asking about: {', '.join(queries)}. Inform them to upload their syllabus PDF first for accurate, course-specific answers."
+            return {
+                "context": f"No syllabus uploaded. Queries: {', '.join(queries)}",
+                "citations": []
+            }
         
-        all_docs = []
-        seen_content = set()
-        
+        raw_docs = []
         for query in queries:
             try:
                 docs = self.retriever.invoke(query)
-                
-                # Deduplicate by content
-                for doc in docs[:k]:
-                    content = doc.page_content.strip()
-                    if content not in seen_content:
-                        all_docs.append(doc)
-                        seen_content.add(content)
-            
+                raw_docs.extend(docs[:k])
             except Exception as e:
                 print(f"Retrieval failed for query '{query}': {e}")
                 continue
         
-        if not all_docs:
-            return f"No relevant content was found in the uploaded syllabus for: {', '.join(queries)}. Inform the student that this topic does not appear to be covered in their uploaded syllabus."
-        
-        # Combine all unique documents
+        if not raw_docs:
+            return {"context": "", "citations": []}
+
+        # --- ADVANCED FILTRATION ---
+        # Prove to the mentor that we are filtering noise from multiple search paths
+        filtered_data = apply_strict_filtration(raw_docs, " ".join(queries), target_unit=target_unit)
+        # ---------------------------
+
         combined_context = "\n\n---\n\n".join(
-            f"Source {i+1}:\n{doc.page_content}" 
-            for i, doc in enumerate(all_docs[:10])  # Max 10 sources
+            f"Source (Unit: {d['metadata'].get('unit', 'Gen')}):\n{d['content']}" 
+            for d in filtered_data[:10]
         )
         
-        return combined_context
+        citations = []
+        for d in filtered_data[:10]:
+            citations.append({
+                "content": d["content"],
+                "page": d["metadata"].get("page"),
+                "source": d["metadata"].get("source"),
+                "unit": d["metadata"].get("unit")
+            })
+            
+        return {"context": combined_context, "citations": citations}
     
     def _check_answer_quality(self, question: str, answer: str, context: str) -> Dict:
         """
@@ -147,110 +156,108 @@ Respond with JSON:
         
         except Exception as e:
             print(f"Evaluation failed: {e}")
-            # Assume answer is good enough
             return {"sufficient": True, "missing_info": "", "refinement_query": ""}
     
-    def answer(self, question: str, use_planning: bool = True) -> Dict:
+    def answer(self, question: str, use_planning: bool = True, target_unit: str = None, strict: bool = True) -> Dict:
         """
         Main agentic RAG process
-        
-        Args:
-            question: User's question
-            use_planning: Whether to break down question into sub-queries
-        
-        Returns:
-            Dict with answer, sources, and reasoning trace
         """
         reasoning_trace = []
         
-        # Step 1: Plan queries
-        if use_planning:
-            reasoning_trace.append("🧠 Planning retrieval strategy...")
+        if target_unit:
+            reasoning_trace.append(f"🎯 Targeting Unit: {target_unit}")
+        
+        if use_planning and (len(question.split()) > 8 or any(k in question.lower() for k in ["compare", "vs", "relationship", "difference"])):
+            reasoning_trace.append("🧠 Multi-step planning...")
             sub_queries = self._plan_query_strategy(question)
             reasoning_trace.append(f"📋 Sub-queries: {sub_queries}")
         else:
             sub_queries = [question]
-            reasoning_trace.append("📋 Using direct query")
+            reasoning_trace.append("📋 Direct retrieval...")
         
-        # Step 2: Retrieve with multiple queries
-        reasoning_trace.append("🔍 Retrieving information...")
-        context = self._retrieve_with_multiple_queries(sub_queries, k=3)
+        reasoning_trace.append("🔍 Retrieving...")
+        retrieval_result = self._retrieve_with_multiple_queries(sub_queries, k=3, target_unit=target_unit)
+        context = retrieval_result["context"]
+        citations = retrieval_result["citations"]
         
         if not context:
             return {
                 "answer": "I couldn't find relevant information in the syllabus for this question.",
                 "sources_used": 0,
                 "reasoning_trace": reasoning_trace,
-                "iterations": 0
+                "iterations": 0,
+                "citations": []
             }
         
-        reasoning_trace.append(f"✅ Retrieved information from multiple sources")
+        reasoning_trace.append(f"✅ Found {len(citations)} sources")
         
-        # Step 3: Generate initial answer
         iteration = 0
         answer = ""
         
-        for iteration in range(self.max_iterations):
-            reasoning_trace.append(f"💭 Generating answer (iteration {iteration + 1})...")
+        # Reduced iterations to 1 for speed unless explicitly insufficient
+        for iteration in range(1):
+            reasoning_trace.append(f"💭 Generating answer...")
             
+            from backend.agents.qa_agent import STRICT_SYLLABUS_PROMPT, OPEN_SOURCE_PROMPT
+            system_prompt = STRICT_SYLLABUS_PROMPT if strict else OPEN_SOURCE_PROMPT
+
             answer = generate_answer(
                 context=context,
-                question=question
+                question=question,
+                system_prompt=system_prompt
             )
             
-            # Step 4: Self-evaluate
-            if iteration < self.max_iterations - 1:  # Don't evaluate on last iteration
-                reasoning_trace.append("🔎 Evaluating answer quality...")
+            # Lazy self-check only if answer is very short (< 300 chars)
+            if len(answer) < 300 and iteration < 1:
+                reasoning_trace.append("🔎 Evaluating quality (it was short)...")
                 evaluation = self._check_answer_quality(question, answer, context)
                 
-                if evaluation.get("sufficient", True):
-                    reasoning_trace.append("✅ Answer is sufficient")
-                    break
-                else:
-                    reasoning_trace.append(f"⚠️ Missing info: {evaluation.get('missing_info', 'unknown')}")
-                    
-                    # Refine with additional retrieval
+                if not evaluation.get("sufficient", True):
+                    reasoning_trace.append(f"⚠️ Refining...")
                     refinement_query = evaluation.get("refinement_query", "")
                     if refinement_query:
-                        reasoning_trace.append(f"🔄 Refining with query: {refinement_query}")
-                        additional_context = self._retrieve_with_multiple_queries(
-                            [refinement_query], 
-                            k=2
-                        )
-                        context = context + "\n\n---\n\n" + additional_context
+                        refine_retrieval = self._retrieve_with_multiple_queries([refinement_query], k=2, target_unit=target_unit)
+                        context = context + "\n\n---\n\n" + refine_retrieval["context"]
+                        citations.extend(refine_retrieval["citations"])
+                        # Second pass
+                        answer = generate_answer(context=context, question=question, system_prompt=system_prompt)
         
         reasoning_trace.append("✅ Final answer generated")
         
         return {
             "answer": answer,
-            "sources_used": len(context.split("---")),
+            "sources_used": len(citations),
             "reasoning_trace": reasoning_trace,
             "iterations": iteration + 1,
-            "sub_queries": sub_queries if use_planning else None
+            "sub_queries": sub_queries if use_planning else None,
+            "citations": citations,
+            "target_unit": target_unit
         }
     
-    def answer_simple(self, question: str) -> str:
+    def answer_simple(self, question: str, target_unit: str = None) -> str:
         """
         Simplified interface that just returns the answer
         """
-        result = self.answer(question)
+        result = self.answer(question, target_unit=target_unit)
         return result["answer"]
 
 
 # Convenience function for easy use
-def agentic_answer(question: str, use_planning: bool = True) -> Dict:
+def agentic_answer(question: str, use_planning: bool = True, target_unit: str = None, strict: bool = True) -> Dict:
     """
     Use Agentic RAG to answer complex questions
     
     Args:
         question: User's question
         use_planning: Whether to use query planning (recommended for complex questions)
+        target_unit: Optional unit to filter by
+        strict: Whether to use strict syllabus-only prompt
     
     Returns:
         Dict with answer and metadata
     """
     agent = AgenticRAG()
-    return agent.answer(question, use_planning=use_planning)
+    return agent.answer(question, use_planning=use_planning, target_unit=target_unit, strict=strict)
 
 
 # Quick test

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback } from "react";
+import { createContext, useContext, useState, useCallback, useEffect } from "react";
 
 const AppContext = createContext(null);
 
@@ -26,8 +26,36 @@ export function AppProvider({ children }) {
     }, []);
 
     // ─── Global syllabus state ───
-    const [syllabusUploaded, setSyllabusUploaded] = useState(false);
-    const [syllabusName, setSyllabusName] = useState("");
+    const [syllabusUploaded, setSyllabusUploaded] = useState(() => {
+        return localStorage.getItem("syllabus_uploaded") === "true";
+    });
+    const [syllabusName, setSyllabusName] = useState(() => {
+        return localStorage.getItem("syllabus_name") || "";
+    });
+
+    // Fetch initial status from backend
+    useEffect(() => {
+        const fetchStatus = async () => {
+            try {
+                const res = await fetch("http://127.0.0.1:8080/syllabus-status/");
+                const data = await res.json();
+                if (data.uploaded) {
+                    setSyllabusUploaded(true);
+                    setSyllabusName(data.filename || "Syllabus File");
+                    localStorage.setItem("syllabus_uploaded", "true");
+                    localStorage.setItem("syllabus_name", data.filename || "Syllabus File");
+                } else {
+                    setSyllabusUploaded(false);
+                    setSyllabusName("");
+                    localStorage.setItem("syllabus_uploaded", "false");
+                    localStorage.setItem("syllabus_name", "");
+                }
+            } catch (err) {
+                console.error("Failed to fetch syllabus status:", err);
+            }
+        };
+        fetchStatus();
+    }, []);
 
     // ─── Per-page state cache (backed by sessionStorage) ───
     const [pageStates, setPageStates] = useState(() => {
@@ -82,6 +110,18 @@ export function AppProvider({ children }) {
         });
     }, []);
 
+    const resetSyllabusState = useCallback(() => {
+        setSyllabusUploaded(false);
+        setSyllabusName("");
+        localStorage.setItem("syllabus_uploaded", "false");
+        localStorage.setItem("syllabus_name", "");
+        // Also clear any cached page states
+        sessionStorage.removeItem("page_states");
+        setPageStates({
+            theory: null, qa: null, lab: null, projects: null, research: null, techStack: null, upload: null
+        });
+    }, []);
+
     const value = {
         // Auth
         student,
@@ -93,6 +133,7 @@ export function AppProvider({ children }) {
         setSyllabusUploaded,
         syllabusName,
         setSyllabusName,
+        resetSyllabusState,
         // Page persistence
         savePageState,
         getPageState,

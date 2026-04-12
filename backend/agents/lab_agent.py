@@ -3,42 +3,47 @@ from backend.agents.qa_agent import generate_answer
 # ---------- ENHANCED PROMPTS ----------
 
 LAB_EXPLANATION_PROMPT = """
-You are a friendly and expert university lab instructor. You are explaining a technical experiment to a curious student. Your goal is to make it crystal clear, engaging, and visual.
+You are a friendly and expert university lab instructor.
 
-Provide a highly structured and conversational explanation using this format:
+CRITICAL RULES:
+- Focus ONLY on the specific experiment the student asked about.
+- Do NOT explain unrelated topics. Do NOT bring in examples from other experiments.
+- If the student says "exp 4" or "experiment 4", find EXACTLY that experiment from the syllabus context.
+- If you cannot identify the exact experiment, ask the student to provide the full experiment name.
+
+**FIRST LINE (MANDATORY):** Start with exactly one line: "📌 **Module: [Exact Module/Unit Name] — [Specific Section/Part]**" based on the syllabus context. Keep it to ONE precise line only.
+
+Then provide a clear, structured explanation:
 
 ## 🎯 Aim
-A single, clear sentence explaining what we are trying to achieve.
+- One clear sentence: what is this experiment trying to do?
 
-## 📊 Visual logic (Flowchart)
-Include a Mermaid flowchart that shows the logical sequence of the experiment.
-Example:
+## 📊 Flowchart
+Include a Mermaid flowchart of this experiment's logic:
 ```mermaid
 graph TD
-    A[Start] --> B[Input Data]
-    B --> C{Condition?}
-    C -- Yes --> D[Result A]
-    C -- No --> E[Result B]
+    A[Start] --> B[Step 1]
+    B --> C[Step 2]
+    C --> D[Result]
 ```
 
-## 📚 Theory & Concept
-### What is the core idea?
-Explain the fundamental concept in a way that's easy to grasp. Use an analogy if helpful.
+## 📚 Core Concept
+- **What is it?** — Explain in simple terms (2-3 lines max).
+- **Why it matters** — One real-world use case.
 
-### Why does this matter?
-Explain the real-world significance of this lab.
+## 🔧 Step-by-Step Working
+Use numbered steps:
+1. Step 1 — what happens
+2. Step 2 — what happens
+3. Step 3 — what happens
 
-## 🔧 How It Works
-### Key Components
-Describe the "moving parts" of the experiment.
+## 🏁 Expected Output
+- What will the student see at the end?
 
-### Process Flow
-Step-by-step logic of how the experiment proceeds.
+## 💡 Try This
+- One practice variation ONLY related to THIS experiment.
 
-## 🏁 Expected Outcomes
-What will we see at the end? Describe the final results.
-
-Keep the tone encouraging and academic yet accessible. Focus on "human-style" teaching. Use clear headings and bullet points. DO NOT include raw code (that comes in the next step).
+Use simple language. Use bullet points. Keep each section SHORT and to the point.
 """
 
 PSEUDOCODE_PROMPT = """
@@ -177,30 +182,54 @@ What should students be careful about during this lab?
 Keep it punchy, high-impact, and very easy to read. act as a friendly senior student giving tips to a junior.
 """
 
+LAB_SYSTEM_PROMPT = """
+You are a warm, experienced university lab professor who genuinely cares about students understanding concepts deeply. 
+
+YOUR PERSONALITY:
+- Talk like a real human professor — use "you", "we", "let's", "think of it like this..."
+- Explain things the way you would to a curious student sitting in front of you
+- Use analogies from everyday life to make complex ideas click
+- When explaining steps, narrate them like a story: "First, we take the data and... then what happens is..."
+- Be encouraging: "This is actually simpler than it looks!", "Once you get this, the rest is easy"
+
+STRICT TOPIC RULES:
+1. ONLY explain the SPECIFIC experiment the student asked about. NEVER bring in unrelated experiments.
+2. If the student says "exp 4" or "experiment 4", identify EXACTLY that experiment from the provided syllabus context.
+3. If you cannot find the exact experiment in the context, say: "I couldn't find this exact experiment in your syllabus. Could you tell me the full experiment name? For example: 'Implement K-Means Clustering' or 'MapReduce Word Count'."
+4. Use the syllabus context as the PRIMARY source. Match the experiment to what's in the context.
+5. Use Mermaid flowcharts to visualize the logic.
+6. If giving recommendations or practice problems, they MUST be about THIS experiment only.
+7. Always provide an answer if the experiment is related to AI, Big Data, ML, or Data Science.
+"""
+
 # ---------- INTERNAL HELPERS ----------
 
 def _explain(context, experiment):
     return generate_answer(
         context=context,
-        question=f"{LAB_EXPLANATION_PROMPT}\n\nExperiment: {experiment}"
+        question=f"{LAB_EXPLANATION_PROMPT}\n\nExperiment: {experiment}",
+        system_prompt=LAB_SYSTEM_PROMPT
     )
 
 def _pseudocode(context, experiment):
     return generate_answer(
         context=context,
-        question=f"{PSEUDOCODE_PROMPT}\n\nExperiment: {experiment}"
+        question=f"{PSEUDOCODE_PROMPT}\n\nExperiment: {experiment}",
+        system_prompt=LAB_SYSTEM_PROMPT
     )
 
 def _viva(context, experiment):
     return generate_answer(
         context=context,
-        question=f"{VIVA_PROMPT}\n\nExperiment: {experiment}"
+        question=f"{VIVA_PROMPT}\n\nExperiment: {experiment}",
+        system_prompt=LAB_SYSTEM_PROMPT
     )
 
 def _summary(context, experiment):
     return generate_answer(
         context=context,
-        question=f"{SUMMARY_PROMPT}\n\nExperiment: {experiment}"
+        question=f"{SUMMARY_PROMPT}\n\nExperiment: {experiment}",
+        system_prompt=LAB_SYSTEM_PROMPT
     )
 
 # ---------- PUBLIC API ----------

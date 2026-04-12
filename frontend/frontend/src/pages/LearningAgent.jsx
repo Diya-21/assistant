@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef, useLayoutEffect } from "react";
 import PageContainer from "../components/PageContainer";
-import { learnTopic, trackProgress } from "../api/backend";
+import { learnTopic, trackProgress, generateFlashcards } from "../api/backend";
 import { useAppContext } from "../context/AppContext";
+import Citations from "../components/Citations";
+import BloomsBadge from "../components/BloomsBadge";
+import SyllabusVerification from "../components/SyllabusVerification";
+import KnowledgeSuggestions from "../components/KnowledgeSuggestions";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -36,6 +40,16 @@ const Mermaid = ({ chart }) => {
 
 
 export default function LearningAgent() {
+  function speak(text) {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      const cleanText = text.replace(/[*#`]/g, "");
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      window.speechSynthesis.speak(utterance);
+    }
+  }
   const { savePageState, getPageState } = useAppContext();
   const cached = getPageState("theory");
 
@@ -44,6 +58,9 @@ export default function LearningAgent() {
   const [quizAnswers, setQuizAnswers] = useState(cached?.quizAnswers || {});
   const [score, setScore] = useState(cached?.score || null);
   const [loading, setLoading] = useState(false);
+  const [reasoningTrace, setReasoningTrace] = useState([]);
+  const [generatingCards, setGeneratingCards] = useState({});
+  const [flashcards, setFlashcards] = useState({});
   const [error, setError] = useState("");
 
   // Save state to AppContext whenever it changes
@@ -58,30 +75,36 @@ export default function LearningAgent() {
     }
   }, [topic, stages, quizAnswers, score, savePageState]);
 
-  async function handleAsk(stage) {
-    if (!topic.trim()) {
+  async function handleAsk(stage, overtTopic = null) {
+    const topicToUse = overtTopic || topic;
+    if (!topicToUse.trim()) {
       setError("Please enter a topic");
       return;
     }
 
     setLoading(true);
     setError("");
+    setReasoningTrace(["🧠 Initializing syllabus analysis...", "📋 Identifying relevant units..."]);
 
     try {
-      const data = await learnTopic(topic, stage);
+      const data = await learnTopic(topicToUse, stage);
 
       if (data.stage === "ERROR") {
         setError(data.content || "Something went wrong. Please try again.");
+        setReasoningTrace([]);
       } else if (data.content && data.content.includes("⚠️")) {
         setError(data.content);
+        setReasoningTrace([]);
       } else {
         setStages(prev => [...prev, data]);
+        setReasoningTrace(data.reasoning_trace || []);
         setScore(null);
         setQuizAnswers({});
       }
     } catch (err) {
       console.error("Error:", err);
       setError("Failed to connect to backend. Make sure the server is running.");
+      setReasoningTrace([]);
     } finally {
       setLoading(false);
     }
@@ -352,6 +375,84 @@ export default function LearningAgent() {
                 {stage.stage === "REFERENCES" && "📺 Learning Resources"}
               </h3>
 
+              <div style={{ display: "flex", gap: "10px", marginBottom: "1rem" }}>
+                <button onClick={() => speak(stage.content)} style={{
+                  padding: "8px 16px",
+                  borderRadius: "10px",
+                  border: "1px solid #667eea",
+                  background: "rgba(102, 126, 234, 0.1)",
+                  color: "#667eea",
+                  cursor: "pointer",
+                  fontWeight: "700",
+                  fontSize: "0.85rem",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px"
+                }}>🔊 Listen</button>
+
+                <button
+                  onClick={async () => {
+                    const key = `${topic}-${stage.stage}`;
+                    setGeneratingCards(prev => ({ ...prev, [key]: true }));
+                    try {
+                      const res = await generateFlashcards(topic, stage.content);
+                      setFlashcards(prev => ({ ...prev, [key]: res.cards || [] }));
+                    } catch (e) { console.error(e); }
+                    finally { setGeneratingCards(prev => ({ ...prev, [key]: false })); }
+                  }}
+                  disabled={generatingCards[`${topic}-${stage.stage}`]}
+                  style={{
+                    padding: "8px 16px",
+                    borderRadius: "10px",
+                    border: "1px solid #10b981",
+                    background: "rgba(16, 185, 129, 0.1)",
+                    color: "#059669",
+                    cursor: "pointer",
+                    fontWeight: "700",
+                    fontSize: "0.85rem",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px"
+                  }}
+                >
+                  ⚡ {generatingCards[`${topic}-${stage.stage}`] ? "Generating..." : "Generate Flashcards"}
+                </button>
+              </div>
+
+              {/* Flashcards Display */}
+              {flashcards[`${topic}-${stage.stage}`] && (
+                <div style={{
+                  display: "flex",
+                  gap: "1rem",
+                  overflowX: "auto",
+                  padding: "1rem 0",
+                  marginBottom: "1rem",
+                  scrollbarWidth: "thin"
+                }}>
+                  {flashcards[`${topic}-${stage.stage}`].map((card, cidx) => (
+                    <div key={cidx} className="card" style={{
+                      minWidth: "250px",
+                      padding: "1.5rem",
+                      background: "linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%)",
+                      border: "1px solid #d1fae5",
+                      fontSize: "0.9rem",
+                      cursor: "help"
+                    }} title={card.answer}>
+                      <div style={{ fontWeight: "700", color: "#065f46", marginBottom: "0.5rem" }}>Q: {card.question}</div>
+                      <div style={{ color: "#374151", borderTop: "1px dashed #a7f3d0", paddingTop: "0.5rem", marginTop: "0.5rem" }}>
+                        <strong>A:</strong> {card.answer}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* UNIQUE: Bloom's Taxonomy Classification */}
+              {stage.blooms && <BloomsBadge blooms={stage.blooms} />}
+
+              {/* UNIQUE: Syllabus Verification — PROVES answer is from syllabus */}
+              {stage.syllabus_verification && <SyllabusVerification verification={stage.syllabus_verification} />}
+
               <div style={markdownContainerStyle}>
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm, remarkMath]}
@@ -360,7 +461,42 @@ export default function LearningAgent() {
                 >
                   {stage.content}
                 </ReactMarkdown>
+                {stage.citations && stage.citations.length > 0 && (
+                  <div style={{ marginTop: "1.5rem", borderTop: "1px dashed #e2e8f0", paddingTop: "1rem" }}>
+                    <button
+                      onClick={() => {
+                        setStages(prev => prev.map((s, i) => i === idx ? { ...s, _showCites: !s._showCites } : s));
+                      }}
+                      style={{
+                        background: "none",
+                        border: "1px solid #667eea",
+                        color: "#667eea",
+                        padding: "6px 14px",
+                        borderRadius: "20px",
+                        fontSize: "0.85rem",
+                        cursor: "pointer",
+                        marginBottom: "8px"
+                      }}
+                    >
+                      {stage._showCites ? "📖 Hide Citations" : "🔍 View Syllabus Sources"}
+                    </button>
+                    {stage._showCites && <Citations citations={stage.citations} />}
+                  </div>
+                )}
               </div>
+
+              {stage.suggestions && stage.suggestions.length > 0 && (
+                <KnowledgeSuggestions
+                  suggestions={stage.suggestions}
+                  onSelect={(t) => {
+                    setTopic(t);
+                    setStages([]);
+                    setScore(null);
+                    setQuizAnswers({});
+                    handleAsk("explain", t);
+                  }}
+                />
+              )}
             </div>
           );
         })}
@@ -387,8 +523,36 @@ export default function LearningAgent() {
           </div>
         )}
 
-        {/* Loading State */}
-        {loading && (
+        {/* AI Reasoning Console (Visible when loading or when trace exists) */}
+        {(loading || (reasoningTrace && reasoningTrace.length > 0)) && (
+          <div className="thinking-console">
+            <div className="thinking-console-header">
+              <span>
+                {loading && <span className="thinking-loader"></span>}
+                AI Learning Strategy & Reasoning
+              </span>
+              <span>{loading ? "Agent Busy..." : "Trace Stored"}</span>
+            </div>
+
+            <div style={{ padding: "0.5rem 0" }}>
+              {reasoningTrace.map((step, idx) => (
+                <div key={idx} className="trace-step">
+                  <span className="trace-icon">›</span>
+                  <span className="trace-text">{step}</span>
+                </div>
+              ))}
+              {loading && reasoningTrace.length < 5 && (
+                <div className="trace-step" style={{ opacity: 0.7 }}>
+                  <span className="trace-icon">›</span>
+                  <span className="trace-text animate-pulse">Deepening reasoning...</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Loading Message (Fallback simple if needed) */}
+        {loading && !reasoningTrace.length && (
           <div style={{
             padding: "2rem",
             textAlign: "center",
@@ -397,7 +561,7 @@ export default function LearningAgent() {
             margin: "1rem 0"
           }}>
             <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>⏳</div>
-            <p>AI is thinking... This may take up to 30 seconds.</p>
+            <p>AI Assistant is preparing your lesson...</p>
           </div>
         )}
 

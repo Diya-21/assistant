@@ -1,4 +1,4 @@
-from backend.agents.qa_agent import generate_answer
+from backend.agents.qa_agent import generate_answer, GENERAL_PROMPT, STRICT_SYLLABUS_PROMPT
 import json
 import re
 
@@ -49,26 +49,55 @@ def clean_json_response(raw_text: str) -> str:
     
     return raw_text.strip()
 
-def learning_flow(context: str, topic: str, stage: str):
+def learning_flow(context: str, topic: str, stage: str, verification: dict = None):
     stage = stage.lower()
+    
+    unit_info = ""
+    if verification and verification.get("matched_unit"):
+        unit_info = f" (This topic is part of **{verification['matched_unit']}** of your syllabus)"
+
+    if stage == "overview":
+        prompt = """The student wants a **Syllabus Overview**.
+Analyze the provided syllabus context and provide:
+1. **Curriculum Structure**: List all Modules/Units found.
+2. **Key Themes**: What are the main topics covered in this subject?
+3. **Module Breakdown**: For each module, list 3-5 major sub-topics.
+4. **Learning Path**: Suggest a logical order to study these modules.
+
+Use ## headers and bullet points. Be concise but comprehensive."""
+        content = generate_answer(context=context, question=prompt, system_prompt=STRICT_SYLLABUS_PROMPT)
+        return {
+            "stage": "OVERVIEW",
+            "content": content,
+            "next": "Which module would you like to start with?"
+        }
 
     if stage == "explain":
+        all_units = verification.get("all_units", []) if verification else []
+        cross_ref = f"This concept also appears in or relates to: **{', '.join([u for u in all_units])}**." if all_units else ""
+        
         prompt = f"""The student wants to learn about **{topic}**.
+{unit_info}
+Their syllabus topics are provided above as context.
 
-Provide a clear, accurate explanation that directly addresses this topic. Structure your answer naturally using markdown:
-- Start with a concise definition or overview (1-2 paragraphs)
-- Cover the key concepts and important points
-- Include a practical example or analogy if helpful
-- End with a brief summary
-
-IMPORTANT RULES:
-- Answer the topic DIRECTLY. Do not pad with irrelevant information.
-- Use ## headers to organize sections logically.
-- Do NOT generate quiz questions, multiple-choice questions, or test questions. Only explain.
-- If the context mentions the topic, base your explanation on it. If not, use general knowledge but stay accurate.
-- Be concise. Quality over quantity.
+### MANDATORY RESPONSE STRUCTURE (FOLLOW ORDER):
+1. **EXACT MODULE**: Start with "📌 **Module:** [Exact Module/Unit Name] (Primary)"
+2. **BRIEF OVERVIEW**: Provide a brief 3-point summary:
+   - **What is it?**: A clear, 1-sentence definition.
+   - **Why is it?**: The actual problem it solves or why we need it.
+   - **Main Role**: What it actually does in the system/subject.
+3. **THEN** explain the topic in a warm, human way:
+   - Use analogies: "Think of it like..."
+   - **VISUALIZATION**: If there is a process, architecture, or flow, ALWAYS include a professional Mermaid flowchart (` ```mermaid `) to show how it works.
+   - Walk through concepts step by step like on a whiteboard
+   - Give a real-world example that makes the concept click
+   - Use ## headers for each major section
+4. **END WITH**:
+   - 💪 **Try This**: One specific practice problem on this topic
+   - ➡️ **Up Next**: The next logical topic from the syllabus
+Stay strictly within the provided context.
 """
-        content = generate_answer(context=context, question=prompt)
+        content = generate_answer(context=context, question=prompt, system_prompt=STRICT_SYLLABUS_PROMPT)
         return {
             "stage": "EXPLAIN",
             "content": content,
@@ -76,23 +105,20 @@ IMPORTANT RULES:
         }
 
     if stage == "deep":
-        prompt = f"""Provide a comprehensive, exam-level explanation of **{topic}**.
+        prompt = f"""Provide a detailed, exam-level explanation of **{topic}**.
+The student's syllabus topics are provided above.
 
-Cover the following aspects in depth:
-- Detailed overview and core theory
-- Technical details, processes, and any relevant formulas (use LaTeX: $inline$ and $$block$$)
-- Architecture or components if applicable
+If this topic is in the syllabus, cover in depth:
+- Core theory and technical details
+- Processes, formulas, or architectures
 - Advantages and limitations
 - Real-world applications
-- Related concepts worth knowing
 
-IMPORTANT RULES:
-- Use ## headers and organize logically.
-- Use markdown tables for comparisons.
-- Do NOT generate quiz questions or MCQs. Only explain.
-- Be thorough but accurate — no filler or made-up facts.
+If this topic is NOT in the syllabus, say so.
+
+Use ## headers, markdown tables for comparisons. Do NOT generate quiz questions.
 """
-        content = generate_answer(context=context, question=prompt)
+        content = generate_answer(context=context, question=prompt, system_prompt=STRICT_SYLLABUS_PROMPT)
         return {
             "stage": "DEEP",
             "content": content,

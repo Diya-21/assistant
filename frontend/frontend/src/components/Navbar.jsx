@@ -1,8 +1,9 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
+import { clearSyllabus } from "../api/backend";
 
 export default function Navbar() {
-  const { syllabusUploaded, syllabusName, student, logout } = useAppContext();
+  const { syllabusUploaded, syllabusName, student, logout, resetSyllabusState } = useAppContext();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -10,10 +11,22 @@ export default function Navbar() {
     navigate("/login");
   };
 
+  const handleClearSyllabus = async () => {
+    if (window.confirm("Are you sure you want to clear your uploaded syllabus globally?")) {
+      try {
+        await clearSyllabus(true);
+        resetSyllabusState();
+        navigate("/dashboard");
+      } catch (err) {
+        console.error("Clear failed:", err);
+      }
+    }
+  };
+
   return (
     <nav style={styles.nav}>
       <NavLink to="/dashboard" style={{ textDecoration: "none" }}>
-        <h1 style={styles.logo}>🎓 Learning Agent</h1>
+        <h1 style={styles.logo}>🤖 Multimodal AI Teaching Assistant</h1>
       </NavLink>
       <div style={styles.links}>
         <NavLink to="/dashboard" style={navLinkStyle}>🏠 Home</NavLink>
@@ -23,7 +36,9 @@ export default function Navbar() {
         <NavLink to="/tech-stack" style={navLinkStyle}>🛠️ Tech Stack</NavLink>
         <NavLink to="/theory" style={navLinkStyle}>📚 Theory</NavLink>
         <NavLink to="/lab" style={navLinkStyle}>🧪 Lab</NavLink>
+        <NavLink to="/study-materials" style={navLinkStyle}>📖 Materials</NavLink>
         <NavLink to="/history" style={navLinkStyle}>📜 History</NavLink>
+
         <NavLink to="/progress" style={navLinkStyle}>📊 Progress</NavLink>
         {syllabusUploaded && (
           <span style={styles.syllabusChip} title={syllabusName}>
@@ -31,6 +46,11 @@ export default function Navbar() {
           </span>
         )}
         <div style={styles.userArea}>
+          {syllabusUploaded && (
+            <button onClick={handleClearSyllabus} style={{ ...styles.logoutBtn, background: "#fee2e2", color: "#b91c1c", borderColor: "#fecaca", marginRight: "10px" }}>
+              🧹 Clear
+            </button>
+          )}
           <span style={styles.userName}>👤 {student?.name}</span>
           <button onClick={handleLogout} style={styles.logoutBtn}>Logout</button>
         </div>

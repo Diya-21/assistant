@@ -1,13 +1,21 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
-import { getProgress, getAnalytics } from "../api/backend";
+import { getProgress, getAnalytics, clearSyllabus, getSyllabusUnits } from "../api/backend";
+
+function getGreeting() {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good Morning";
+    if (hour < 18) return "Good Afternoon";
+    return "Good Evening";
+}
 
 export default function Dashboard() {
-    const { student, logout, syllabusUploaded, syllabusName } = useAppContext();
+    const { student, logout, syllabusUploaded, syllabusName, setSyllabusUploaded, setSyllabusName, resetSyllabusState } = useAppContext();
     const navigate = useNavigate();
     const [progress, setProgress] = useState(null);
     const [analytics, setAnalytics] = useState(null);
+    const [syllabusUnits, setSyllabusUnits] = useState([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -17,12 +25,14 @@ export default function Dashboard() {
     async function loadProgress() {
         setLoading(true);
         try {
-            const [progressData, analyticsData] = await Promise.all([
+            const [progressData, analyticsData, unitsData] = await Promise.all([
                 getProgress(),
                 getAnalytics(),
+                getSyllabusUnits(),
             ]);
             setProgress(progressData);
             setAnalytics(analyticsData);
+            setSyllabusUnits(unitsData?.units || []);
         } catch (err) {
             console.error("Error loading progress:", err);
         } finally {
@@ -43,11 +53,20 @@ export default function Dashboard() {
         navigate("/login");
     };
 
-    const getGreeting = () => {
-        const hour = new Date().getHours();
-        if (hour < 12) return "Good Morning";
-        if (hour < 17) return "Good Afternoon";
-        return "Good Evening";
+    const handleClearData = async () => {
+        if (window.confirm("Are you sure you want to clear your uploaded syllabus and reset all progress? This action cannot be undone.")) {
+            setLoading(true);
+            try {
+                await clearSyllabus(true);
+                resetSyllabusState();
+                alert("Syllabus and progress data cleared successfully!");
+            } catch (err) {
+                console.error("Failed to clear data:", err);
+                alert("Error clearing data. Please try again.");
+            } finally {
+                setLoading(false);
+            }
+        }
     };
 
     if (loading) {
@@ -76,9 +95,14 @@ export default function Dashboard() {
                         </span>
                     )}
                 </div>
-                <button onClick={handleLogout} style={styles.logoutBtn}>
-                    🚪 Logout
-                </button>
+                <div style={{ display: "flex", gap: "10px" }}>
+                    <button onClick={handleClearData} style={{ ...styles.logoutBtn, background: "#ef4444" }}>
+                        🧹 Clear Data
+                    </button>
+                    <button onClick={handleLogout} style={styles.logoutBtn}>
+                        🚪 Logout
+                    </button>
+                </div>
             </div>
 
             {/* Main Content */}
@@ -221,6 +245,62 @@ export default function Dashboard() {
                         </div>
                     </div>
 
+                    {/* Syllabus Mastery Map (Heatmap Feature) */}
+                    <div style={{ marginBottom: "30px" }}>
+                        <h3 style={styles.sectionTitle}>🗺️ Syllabus Mastery Map</h3>
+                        <div style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+                            gap: "16px"
+                        }}>
+                            {syllabusUnits.length > 0 ? syllabusUnits.map((unit, idx) => (
+                                <div key={idx} style={{
+                                    ...styles.card,
+                                    padding: "20px",
+                                    border: "2px solid #f3f4f6",
+                                    background: unit.mastery >= 80 ? "#ecfdf5" :
+                                        unit.mastery >= 50 ? "#fefce8" :
+                                            unit.mastery > 0 ? "#eff6ff" : "#f9fafb",
+                                    borderColor: unit.mastery >= 80 ? "#10b981" :
+                                        unit.mastery >= 50 ? "#f59e0b" :
+                                            unit.mastery > 0 ? "#667eea" : "#e5e7eb",
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    justifyContent: "space-between",
+                                    minHeight: "120px",
+                                    transition: "all 0.3s ease"
+                                }}>
+                                    <div>
+                                        <div style={{ fontSize: "0.75rem", fontWeight: "700", color: "#6b7280", marginBottom: "4px" }}>
+                                            {unit.name.includes("Unit") ? unit.name.split(":")[0] : `UNIT ${idx + 1}`}
+                                        </div>
+                                        <div style={{ fontSize: "0.95rem", fontWeight: "600", color: "#1f2937", lineHeight: "1.3" }}>
+                                            {unit.name.includes(":") ? unit.name.split(":")[1].trim() : unit.name}
+                                        </div>
+                                    </div>
+                                    <div style={{ marginTop: "12px" }}>
+                                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                                            <span style={{ fontSize: "0.7rem", fontWeight: "700" }}>{unit.mastery}% Mastery</span>
+                                        </div>
+                                        <div style={{ height: "6px", background: "rgba(0,0,0,0.05)", borderRadius: "3px" }}>
+                                            <div style={{
+                                                width: `${unit.mastery}%`,
+                                                height: "100%",
+                                                background: unit.mastery >= 80 ? "#10b981" :
+                                                    unit.mastery >= 50 ? "#f59e0b" : "#667eea",
+                                                borderRadius: "3px"
+                                            }} />
+                                        </div>
+                                    </div>
+                                </div>
+                            )) : (
+                                <div style={{ color: "#9ca3af", gridColumn: "1 / -1", textAlign: "center", padding: "40px", background: "white", borderRadius: "16px" }}>
+                                    Upload a syllabus to see your mastery map.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
                     {/* Quick Actions */}
                     <div style={styles.quickActionsSection}>
                         <h3 style={styles.sectionTitle}>⚡ Quick Actions</h3>
@@ -246,9 +326,9 @@ export default function Dashboard() {
 
 const quickLinks = [
     { icon: "📤", label: "Upload Syllabus", path: "/upload" },
-    { icon: "📚", label: "Theory", path: "/theory" },
-    { icon: "🧪", label: "Lab", path: "/lab" },
-    { icon: "💡", label: "Projects", path: "/projects" },
+    { icon: "📚", label: "Theory Chat", path: "/theory" },
+    { icon: "🧪", label: "Virtual Lab", path: "/lab" },
+    { icon: "💡", label: "Project Hub", path: "/projects" },
     { icon: "🔬", label: "Research", path: "/research" },
     { icon: "🛠️", label: "Tech Stack", path: "/tech-stack" },
     { icon: "📜", label: "History", path: "/history" },

@@ -71,10 +71,23 @@ export async function uploadSyllabus(file) {
   return res.json();
 }
 
+/* ---------- Clear Syllabus ---------- */
+export async function clearSyllabus(clearAll = false) {
+  const form = new FormData();
+  form.append("clear_all", clearAll);
+
+  const res = await fetch(`${API_BASE}/clear-syllabus/`, {
+    method: "POST",
+    body: form,
+  });
+  return res.json();
+}
+
 /* ---------- Ask Theory Question ---------- */
-export async function askQuestion(question) {
+export async function askQuestion(question, mode = "chat") {
   const formData = new FormData();
   formData.append("question", question);
+  formData.append("mode", mode);
   formData.append("user_id", getUserIdLocal());
 
   const res = await fetch(`${API_BASE}/ask/`, {
@@ -116,9 +129,10 @@ export async function learnTopic(topic, stage = "explain") {
 }
 
 /* ---------- Deep Research (Agentic RAG) ---------- */
-export async function deepResearch(question) {
+export async function deepResearch(question, strict = true) {
   const form = new FormData();
   form.append("question", question);
+  form.append("strict", strict);
   form.append("user_id", getUserIdLocal());
 
   const res = await fetch(`${API_BASE}/deep-research/`, {
@@ -130,12 +144,13 @@ export async function deepResearch(question) {
 }
 
 /* ---------- Follow-up Chat ---------- */
-export async function followUpChat(topic, question, context = "", mode = "chat") {
+export async function followUpChat(topic, question, context = "", mode = "chat", strict = true) {
   const form = new FormData();
   form.append("topic", topic);
   form.append("question", question);
   form.append("context", context);
   form.append("mode", mode);
+  form.append("strict", strict);
   form.append("user_id", getUserIdLocal());
 
   const res = await fetch(`${API_BASE}/follow-up/`, {
@@ -165,6 +180,11 @@ export async function trackProgress(topic, activityType, score = null, total = n
 
 export async function getProgress() {
   const res = await fetch(`${API_BASE}/progress/${getUserId()}`);
+  return res.json();
+}
+
+export async function getSyllabusUnits() {
+  const res = await fetch(`${API_BASE}/syllabus-units/?user_id=${getUserId()}`);
   return res.json();
 }
 
@@ -288,6 +308,21 @@ export async function getCodeHelp(task, technology) {
   form.append("user_id", getUserIdLocal());
 
   const res = await fetch(`${API_BASE}/code-help/`, {
+    method: "POST",
+    body: form,
+  });
+
+  return res.json();
+}
+
+/* ---------- Flashcards ---------- */
+export async function generateFlashcards(topic, content) {
+  const form = new FormData();
+  form.append("topic", topic);
+  form.append("content", content);
+  form.append("user_id", getUserIdLocal());
+
+  const res = await fetch(`${API_BASE}/generate-flashcards/`, {
     method: "POST",
     body: form,
   });

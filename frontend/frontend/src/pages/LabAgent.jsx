@@ -1,8 +1,40 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import { useAppContext } from "../context/AppContext";
 import { runLab, followUpChat } from "../api/backend";
+import Citations from "../components/Citations";
+import SyllabusVerification from "../components/SyllabusVerification";
+import KnowledgeSuggestions from "../components/KnowledgeSuggestions";
+import mermaid from "mermaid";
+
+mermaid.initialize({
+  startOnLoad: true,
+  theme: "default",
+  securityLevel: "loose",
+  fontFamily: "Inter, sans-serif",
+});
+
+const Mermaid = ({ chart }) => {
+  const ref = useRef(null);
+
+  useLayoutEffect(() => {
+    if (ref.current && chart) {
+      mermaid.contentLoaded();
+      mermaid.render(`mermaid-${Math.random().toString(36).substr(2, 9)}`, chart).then(({ svg }) => {
+        if (ref.current) ref.current.innerHTML = svg;
+      }).catch(err => {
+        console.error("Mermaid render error:", err);
+        if (ref.current) ref.current.innerText = "⚠️ Could not render diagram. Please check syntax.";
+      });
+    }
+  }, [chart]);
+
+  return <div key={chart} ref={ref} style={{ background: "white", padding: "1.5rem", borderRadius: "12px", border: "1px solid #e5e7eb", margin: "1rem 0", display: "flex", justifyContent: "center", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }} />;
+};
 
 export default function LabAgent() {
   const { savePageState, getPageState } = useAppContext();
@@ -19,6 +51,19 @@ export default function LabAgent() {
   const [labChat, setLabChat] = useState(cached?.labChat || {});
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
+  const [reasoningTrace, setReasoningTrace] = useState([]);
+
+
+  /* ── TTS Logic ── */
+  const speak = (text) => {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      window.speechSynthesis.speak(utterance);
+    }
+  };
 
   const fileInputRef = useRef(null);
 
@@ -38,6 +83,8 @@ export default function LabAgent() {
   const callLabAgent = async (step) => {
     setLoading(true);
     setError("");
+    setReasoningTrace([]);
+
 
     try {
       const data = await runLab(experiment, step);
@@ -55,9 +102,17 @@ export default function LabAgent() {
       const newContent = data.content;
       setContent(newContent);
       setStage(step);
+      setReasoningTrace(data.reasoning_trace || []);
+
 
       // Add to history
-      setHistory(prev => [...prev, { stage: step, content: newContent }]);
+      setHistory(prev => [...prev, {
+        stage: step,
+        content: newContent,
+        citations: data.citations,
+        syllabus_verification: data.syllabus_verification,
+        suggestions: data.suggestions
+      }]);
     } catch (err) {
       setError(err.message || "Failed to fetch lab content");
     } finally {
@@ -84,21 +139,32 @@ export default function LabAgent() {
   };
 
 
-  const handleLabChat = async () => {
-    if (!chatInput.trim() || !experiment) return;
+  const handleLabChat = async (overrideMsg = null) => {
+    const msgText = overrideMsg || chatInput;
+    if (!msgText.trim() || !experiment) return;
 
-    const userMsg = { role: "user", content: chatInput, timestamp: new Date().toISOString() };
+    const userMsg = { role: "user", content: msgText, timestamp: new Date().toISOString() };
     const currentMsgs = labChat[experiment] || [];
     const newMsgs = [...currentMsgs, userMsg];
 
     setLabChat(prev => ({ ...prev, [experiment]: newMsgs }));
     setChatInput("");
     setChatLoading(true);
+    setReasoningTrace([]);
+
 
     try {
       const contextStr = newMsgs.map(m => `${m.role === "user" ? "Student" : "Instructor"}: ${m.content}`).join("\n");
       const data = await followUpChat(experiment, userMsg.content, contextStr, "chat");
-      const aiMsg = { role: "assistant", content: data.content, timestamp: new Date().toISOString() };
+      setReasoningTrace(data.reasoning_trace || []);
+      const aiMsg = {
+        role: "assistant",
+        content: data.content,
+        timestamp: new Date().toISOString(),
+        citations: data.citations || [],
+        syllabus_verification: data.syllabus_verification,
+        suggestions: data.suggestions
+      };
       setLabChat(prev => ({ ...prev, [experiment]: [...newMsgs, aiMsg] }));
     } catch (err) {
       setError("Failed to get chat response.");
@@ -323,8 +389,51 @@ export default function LabAgent() {
                       <div key={idx} style={{ ...styles.msgBubble, ...(msg.role === "user" ? styles.userBubble : styles.aiBubble) }}>
                         <div style={styles.msgRole}>{msg.role === "user" ? "👤 Student" : "👨‍🏫 Instructor"}</div>
                         <div className="msg-content">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm, remarkMath]}
+                            rehypePlugins={[rehypeKatex]}
+                            components={{
+                              code: ({ node, inline, className, children, ...props }) => {
+                                const match = /language-(\w+)/.exec(className || "");
+                                if (!inline && match && match[1] === "mermaid") {
+                                  return <Mermaid chart={String(children).replace(/\n$/, "")} />;
+                                }
+                                return (
+                                  <code className={className} style={{
+                                    background: inline ? "#f1f5f9" : "#1e293b",
+                                    color: inline ? "#475569" : "#f8fafc",
+                                    padding: inline ? "2px 4px" : "1rem",
+                                    borderRadius: "4px",
+                                    display: inline ? "inline" : "block",
+                                    overflowX: "auto",
+                                    fontSize: "0.9em"
+                                  }} {...props}>
+                                    {children}
+                                  </code>
+                                );
+                              }
+                            }}
+                          >
+                            {msg.content}
+                          </ReactMarkdown>
                         </div>
+
+                        {msg.role === "assistant" && (
+                          <div style={{ display: "flex", gap: "10px", marginTop: "10px", alignItems: "center" }}>
+                            <button
+                              onClick={() => speak(msg.content)}
+                              style={{
+                                background: "none",
+                                border: "1px solid #10b981",
+                                color: "#10b981",
+                                padding: "4px 12px",
+                                borderRadius: "20px",
+                                fontSize: "0.85rem",
+                                cursor: "pointer"
+                              }}
+                            >🔊 Listen</button>
+                          </div>
+                        )}
                       </div>
                     ))}
                     {chatLoading && (
@@ -335,6 +444,25 @@ export default function LabAgent() {
                       </div>
                     )}
                   </div>
+
+                  {/* ✨ AI Reasoning Console ✨ */}
+                  {(chatLoading || reasoningTrace.length > 0) && (
+                    <div className="thinking-console" style={{ margin: "10px 0" }}>
+                      <div className="thinking-console-header" style={{ fontSize: "0.7rem" }}>
+                        <span>{chatLoading ? "🧠 Instructor Thinking..." : "📋 Strategy Log"}</span>
+                        <span>{chatLoading ? "Analyzing..." : "Trace Stored"}</span>
+                      </div>
+                      <div style={{ maxHeight: "150px", overflowY: "auto" }}>
+                        {reasoningTrace.map((step, idx) => (
+                          <div key={idx} className="trace-step" style={{ fontSize: "0.8rem", marginBottom: "4px" }}>
+                            <span className="trace-icon">›</span>
+                            <span className="trace-text">{step}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div style={styles.chatInputArea}>
                     <input
                       type="text"
@@ -356,7 +484,39 @@ export default function LabAgent() {
               ) : (
                 <div style={styles.contentBox}>
                   <div className="msg-content" style={styles.markdownContent}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "1rem" }}>
+                      <button
+                        onClick={() => speak(content)}
+                        style={{ ...styles.nextBtn, marginLeft: 0, padding: "8px 16px" }}
+                      >🔊 Listen to Explanation</button>
+                    </div>
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkMath]}
+                      rehypePlugins={[rehypeKatex]}
+                      components={{
+                        code: ({ node, inline, className, children, ...props }) => {
+                          const match = /language-(\w+)/.exec(className || "");
+                          if (!inline && match && match[1] === "mermaid") {
+                            return <Mermaid chart={String(children).replace(/\n$/, "")} />;
+                          }
+                          return (
+                            <code className={className} style={{
+                              background: inline ? "#f1f5f9" : "#1e293b",
+                              color: inline ? "#475569" : "#f8fafc",
+                              padding: inline ? "2px 4px" : "1rem",
+                              borderRadius: "4px",
+                              display: inline ? "inline" : "block",
+                              overflowX: "auto",
+                              fontSize: "0.9em"
+                            }} {...props}>
+                              {children}
+                            </code>
+                          );
+                        }
+                      }}
+                    >
+                      {content}
+                    </ReactMarkdown>
                   </div>
                 </div>
               )}

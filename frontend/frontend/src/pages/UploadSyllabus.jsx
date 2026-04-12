@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { uploadSyllabus } from "../api/backend";
+import { uploadSyllabus, clearSyllabus } from "../api/backend";
 import { useAppContext } from "../context/AppContext";
 
 export default function UploadSyllabus() {
@@ -11,6 +11,7 @@ export default function UploadSyllabus() {
   const [isSuccess, setIsSuccess] = useState(cached?.isSuccess || false);
   const [loading, setLoading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const fileInputRef = useRef(null);
 
   // Persist state on changes
@@ -51,6 +52,23 @@ export default function UploadSyllabus() {
       setIsSuccess(false);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleClear = async () => {
+    if (!window.confirm("This will remove all uploaded syllabus data. Are you sure?")) return;
+    setClearing(true);
+    try {
+      const res = await clearSyllabus();
+      setStatus(res.message || "Syllabus data cleared!");
+      setIsSuccess(false);
+      setFile(null);
+      setSyllabusUploaded(false);
+      setSyllabusName("");
+    } catch {
+      setStatus("Failed to clear data.");
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -188,6 +206,19 @@ export default function UploadSyllabus() {
                 Upload Syllabus
               </>
             )}
+          </button>
+
+          {/* Clear Syllabus Button */}
+          <button
+            onClick={handleClear}
+            disabled={clearing}
+            style={{
+              ...styles.clearBtn,
+              opacity: clearing ? 0.6 : 1,
+              cursor: clearing ? "not-allowed" : "pointer",
+            }}
+          >
+            {clearing ? "Clearing..." : "🗑️ Clear Syllabus & Upload New"}
           </button>
 
           {/* Status Message */}
@@ -358,6 +389,22 @@ const styles = {
     borderRadius: "14px",
     background: "linear-gradient(135deg, #667eea, #764ba2)",
     color: "white",
+    transition: "all 0.2s",
+  },
+  clearBtn: {
+    width: "100%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "10px",
+    padding: "14px",
+    fontSize: "1rem",
+    fontWeight: "600",
+    border: "2px solid #ef4444",
+    borderRadius: "14px",
+    background: "white",
+    color: "#ef4444",
+    marginTop: "12px",
     transition: "all 0.2s",
   },
   spinner: {
